@@ -1,5 +1,5 @@
 import { View, div, image } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input } from "gpui-base";
+import { v_flex, h_flex, InputState, Input, Scrollbar } from "gpui-base";
 import { spaces, panes, focused, exec, watchFolder, theme, run, appHome } from "herdr";
 import { helixTab, helixPopup, openTab, openPopup } from "./hx.js";
 import { iconFor } from "./icons.js";
@@ -249,9 +249,12 @@ export default class Changes extends View {
             .hover((s) => s.bg(t.hover).text_color(t.foreground))
             .on_click((_e, cx) => { this.collapsed = all ? new Set() : new Set(dirs); cx.notify(); }).child(all ? "Expand all" : "Collapse all"));
         }))
-      .child(v_flex().id("changes-list").flex_1().min_h(0).overflow_y_scrollbar().p(6)
-        .children(this.view === "folders" ? this.entries(this.tree(), 0, t) : this.files.map((f) => this.row(f, t)))
-        .when(!this.files.length, (e) => e.child(div().p(8).text_color(t.dim).child(this.error || (this.loading ? "Loading changes…" : this.root ? "No uncommitted changes" : "No folder")))))
+      // overflow_y_scrollbar() wraps the list, so its flex sizing never reached the panel's layout.
+      .child(div().flex_1().min_h(0).relative()
+        .child(v_flex().id("changes-list").absolute().inset_0().overflow_y_scroll().p(6)
+          .children(this.view === "folders" ? this.entries(this.tree(), 0, t) : this.files.map((f) => this.row(f, t)))
+          .when(!this.files.length, (e) => e.child(div().p(8).text_color(t.dim).child(this.error || (this.loading ? "Loading changes…" : this.root ? "No uncommitted changes" : "No folder")))))
+        .child(Scrollbar.vertical("changes-list").absolute().inset_0()))
       .when(this.limited, el => el.child(div().px(12).py(4).text_size(11).text_color(t.dim).child("Showing the first 1,000 changed files")))
       .when(Boolean(this.note), (e) => e.child(div().px(10).pb(8).text_size(11).text_color(t.ansi1).child(this.note)))
       .child(h_flex().flex_none().p(10).gap(8).border_t(1).border_color(t.border)
