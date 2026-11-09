@@ -13,6 +13,7 @@ export function element(kind = "div") {
         else if (name === "children") target.items.push(...args[0]);
         else if (name === "tooltip") target.tip = args[0];
         else if (name === "spin") target.spinning = true;
+        else if (name === "overflow_y_scrollbar") /** @type {any} */ (target).scrollable = true;
         else if (name === "when") { if (args[0]) args[1](el); }
         else if (name === "map") return args[0](el);
         else if (name === "hover" || name === "active") args[0](element());

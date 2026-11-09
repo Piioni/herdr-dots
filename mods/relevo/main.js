@@ -1,7 +1,7 @@
 import { View } from "gpui-kit";
 import { props, nextCommand, notify } from "herdr";
 import { LAUNCHERS } from "./accounts.js";
-import { Sidebar } from "./sidebar.js";
+import { Sidebar, Launcher } from "./sidebar.js";
 import { PanelToggle, showPanel } from "./toolbar.js";
 import { PanelBar, FileFinder, CheckoutMenu, openFinder, openCheckoutsHere } from "./panelbar.js";
 import { nextWaiting, worktrees } from "./commands.js";
@@ -13,7 +13,7 @@ import { Settings, openSettings } from "./settings.js";
 /** @type {Record<string, new () => any>} */
 const ROLES = {
   accounts: Sidebar, "panel-bar": PanelBar, "panel-toggle": PanelToggle, "find-file": FileFinder, "checkout-menu": CheckoutMenu,
-  handoff: Handoff, fallback: Fallback, settings: Settings,
+  handoff: Handoff, fallback: Fallback, settings: Settings, launcher: Launcher,
 };
 
 export default class Relevo extends View {

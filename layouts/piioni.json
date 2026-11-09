@@ -32,31 +32,13 @@
         },
         {
           "id": "sidebar-lists",
-          "type": "column",
-          "children": [
-            {
-              "id": "spaces",
-              "type": "block",
-              "content": {
-                "mod": "spaces"
-              },
-              "size": {
-                "weight": 1
-              },
-              "min": 90
-            },
-            {
-              "id": "agents",
-              "type": "block",
-              "content": {
-                "mod": "relevo-agents"
-              },
-              "size": {
-                "weight": 1
-              },
-              "min": 90
+          "type": "block",
+          "content": {
+            "mod": "better-sidebar",
+            "props": {
+              "view": "lists"
             }
-          ]
+          }
         },
         {
           "id": "sidebar-footer",

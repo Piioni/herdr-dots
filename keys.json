@@ -1,5 +1,6 @@
 {
   "global": {
+    "cmd-shift-b": "better-sidebar.toggle-panel",
     "alt-1": "tab.select:1",
     "alt-2": "tab.select:2",
     "alt-3": "tab.select:3",

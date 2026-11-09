@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, props, run, closeOverlay } from "herdr";
+import { theme, props, run, closeOverlay, spaces } from "herdr";
 import { LAUNCHERS, launchArgv } from "./accounts.js";
 import { button } from "./ui.js";
 
@@ -12,7 +12,8 @@ export class Fallback {
   open(key) {
     const p = props(), launcher = LAUNCHERS.find((l) => l.key === key);
     closeOverlay(p?.overlay);
-    if (launcher) run("tab.new", { folder: p?.folder, argv: launchArgv(launcher) });
+    if (launcher && (!p?.space || spaces().some((s) => s.id === p.space && !s.machine)))
+      run("tab.new", { ...(p?.space ? { space: p.space } : { folder: p?.folder }), argv: launchArgv(launcher) });
   }
 
   render() {

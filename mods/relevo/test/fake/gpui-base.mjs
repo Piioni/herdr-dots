@@ -3,6 +3,8 @@ import { element } from "./ui.mjs";
 export const h_flex = () => element("h_flex");
 export const v_flex = () => element("v_flex");
 export const Scrollbar = { vertical: () => element("scrollbar"), horizontal: () => element("scrollbar") };
+/** @type {{new:(id:string|number)=>any}} */
+export const Popover = { new: (id) => /** @type {any} */ (element("popover")).id(id) };
 
 const field = (options = {}) => {
   let value = options.value ?? "";

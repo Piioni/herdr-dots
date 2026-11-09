@@ -1,6 +1,6 @@
 import { div, svg } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
-import { theme, run, focused, panes, shared, setShared, openOverlay } from "herdr";
+import { Button, h_flex, v_flex } from "gpui-base";
+import { theme, run, focused, panes, spaces, props, closeOverlay, shared, setShared, openOverlay } from "herdr";
 import { BackgroundWatch, quotaAlerts } from "./alerts.js";
 import { ACCOUNTS, CODEX, LAUNCHERS, API_QUOTAS, API_QUOTAS_AT, launchArgv, launcherOf, loginLauncher, launchChoice, chip, loadClaudeQuotas, publishSetup } from "./accounts.js";
 import { ago, resetText, resetClock, runsOut, clock, FIVE_HOURS, WEEK } from "./lib/time.js";
@@ -17,7 +17,7 @@ const meterTip = (w, label) => {
   return out ? `${resetText(w)} · at this pace 100% at ${clock(out)}` : resetText(w);
 };
 import { collectQuotas, LOGIN_EXPIRED } from "./quota.js";
-import { spinner, withKey } from "./ui.js";
+import { agentIcon, spinner, withKey } from "./ui.js";
 import { openSettings } from "./settings.js";
 
 const STALE = 30 * 60;
@@ -79,15 +79,16 @@ export class Sidebar {
     });
   }
 
-  /** @param {string | Record<string, any>} key */
-  launch(key) {
+  /** @param {string | Record<string, any>} key @param {string} [space] */
+  launch(key, space) {
+    if (space && !spaces().some((s) => s.id === space && !s.machine)) return;
     const f = focused();
     const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
-    const folder = pane?.cwd ?? f?.cwd ?? undefined, requested = typeof key === "string" ? launcherOf(key) : key;
+    const folder = space ? undefined : pane?.cwd ?? f?.cwd ?? undefined, requested = typeof key === "string" ? launcherOf(key) : key;
     const { launcher, note } = launchChoice(requested, this.quota);
-    if (launcher === requested) return run("tab.new", { folder, argv: launchArgv(requested) });
+    if (launcher === requested) return run("tab.new", { ...(space ? { space } : { folder }), argv: launchArgv(requested) });
     // A full account: ask, never switch on its own.
-    openOverlay({ mod: "relevo", kind: "dialog", width: 420, height: 150, props: { role: "fallback", note, folder, requested: requested.key, alternative: launcher.key } });
+    openOverlay({ mod: "relevo", kind: "dialog", width: 420, height: 150, props: { role: "fallback", note, folder, ...(space ? { space } : {}), requested: requested.key, alternative: launcher.key } });
   }
 
   /** @param {ThemeColors} t @param {string} id @param {"5h" | "7d"} label @param {Data | null | undefined} w @param {number} barWidth @param {boolean} stale @param {boolean} hovered */
@@ -190,5 +191,29 @@ export class Sidebar {
             })
             .child(svg("mods/relevo/settings.svg").size(11)))))
       .children([...ACCOUNTS, CODEX].map((p) => this.row(t, p, this.quota[p.key], barWidth)));
+  }
+}
+
+export class Launcher extends Sidebar {
+  /** @param {unknown} _props @param {Context} cx */
+  init(_props, cx) {
+    this.quota = {};
+    this.load(cx);
+  }
+
+  render() {
+    const t = /** @type {ThemeColors} */ (theme()), p = props();
+    const launchers = this.loaded ? LAUNCHERS.filter((l) => l.app !== "codex") : [];
+    return v_flex().w_full().p(5).gap(2).bg(t.popover).text_size(12.8).text_color(t.foreground)
+      .child(div().h(26).flex_none().px(8).text_size(11).text_color(t.dim).child("Start an agent"))
+      .child(v_flex().id("launcher-list").max_h(320).overflow_y_scrollbar().gap(2)
+        .children(launchers.map((l) => Button.new(`launch-profile-${l.key}`)
+          .h(31).flex_none().px(8).gap(8).rounded(5).cursor_pointer().flex().items_center()
+          .hover((s) => s.bg(t.hover)).accessibility_label(l.label)
+          .tooltip(l.app === "pi" ? `${l.label} · Provider follows the selected Pi model` : `${l.label} · ${l.profile}`)
+          .on_click(() => { closeOverlay(p.overlay); this.launch(l, p.space); })
+          .child(agentIcon(l.app))
+          .child(div().flex_1().min_w(0).truncate().child(l.label))))
+        .when(!launchers.length, (el) => el.child(div().px(8).py(6).text_color(t.dim).child(this.loaded ? "No launchers configured" : "Loading…"))));
   }
 }

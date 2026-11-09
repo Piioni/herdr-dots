@@ -36,6 +36,9 @@ export const terminals = () => fake.terminals;
 export const panes = () => fake.panes;
 /** @returns {FakeObject[]} */
 export const spaces = () => fake.spaces;
+/** @returns {FakeObject[]} */
+export const machines = () => [];
+export const hc = async () => ({ code: 0, stdout: '{"machines":[]}' });
 export const layout = () => fake.layout;
 export const focused = () => fake.focused;
 export const props = () => fake.props;
