@@ -227,3 +227,30 @@ test("the sidebar's commands open the popup for that agent and close it", () => 
   mod.command("handoff-close-t1:t2", fakeCx());
   assert.deepEqual(fake.runs.at(-1), ["tab.close", { id: "tb1", confirmed: true }]);
 });
+
+test("a shell that kept its transcript resumes it on the launcher of that profile", async () => {
+  const { resumePlan } = await import("../lib/handoff.js");
+  const launchers = [
+    { key: "claude", app: "claude", account: "personal", command: "env -u CLAUDE_CONFIG_DIR claude", claudeDir: ".claude" },
+    { key: "sipos", app: "claude", account: "work", command: 'env CLAUDE_CONFIG_DIR="$HOME/.claude-sipos" claude', claudeDir: ".claude-sipos" },
+  ];
+  const id = "5984791c-44a4-45d5-8ca0-7795ce15c11b";
+  const plan = resumePlan({ account: "work", transcript: `/home/me/.claude-sipos/projects/-home-me-app/${id}.jsonl`, launchers, home: "/home/me" });
+  assert.equal(plan?.launcher.key, "sipos");
+  assert.equal(plan?.text, `bash -ilc 'env CLAUDE_CONFIG_DIR="$HOME/.claude-sipos" claude --resume ${id}'`);
+  assert.equal(resumePlan({ account: "work", transcript: "/elsewhere/x.jsonl", launchers, home: "/home/me" }), null);
+  assert.equal(resumePlan({ account: null, transcript: null, launchers, home: "/home/me" }), null);
+});
+
+test("resume-agents types the resume command into shells that kept a transcript, and leaves live agents alone", async () => {
+  resetFake();
+  const { resumeAgents } = await import("../commands.js");
+  const id = "5984791c-44a4-45d5-8ca0-7795ce15c11b", transcript = `/home/test/.claude/projects/-home-test-app/${id}.jsonl`;
+  fake.terminals = [
+    { address: "t1", state: "live", agent: "nu", labels: { "agent.account": "personal", "agent.transcript": transcript } },
+    { address: "t2", state: "live", agent: "claude-code", labels: { "agent.account": "personal", "agent.transcript": transcript } },
+    { address: "t3", state: "live", agent: "nu", labels: {} },
+  ];
+  await resumeAgents();
+  assert.deepEqual(calls(/^hc send/).map((c) => c.split(" ")[2]), ["t1"]);
+});

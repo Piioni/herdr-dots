@@ -1,4 +1,6 @@
-import { run, agents, notify, spaces, openOverlay } from "herdr";
+import { run, agents, notify, spaces, openOverlay, terminals, exec, home } from "herdr";
+import { LAUNCHERS } from "./accounts.js";
+import { resumePlan } from "./lib/handoff.js";
 import { focusedCwd } from "./panelbar.js";
 import { shortcut } from "./ui.js";
 
@@ -30,4 +32,20 @@ function agentSummary(all) {
 export function worktrees(action) {
   const folder = focusedCwd(), space = spaces().find((s) => s.active)?.id;
   if (folder) openOverlay({ mod: "worktree", kind: "dialog", width: 560, height: 480, props: { folder, space, action } });
+}
+
+// Live terminals that are a plain shell again but still carry the transcript of the agent that was there.
+export function orphanedAgents() {
+  return terminals().flatMap((t) => {
+    if (t.state !== "live" || t.agent === "claude-code" || t.machine) return [];
+    const plan = resumePlan({ account: t.labels?.["agent.account"] ?? null, transcript: t.labels?.["agent.transcript"] ?? null, launchers: LAUNCHERS, home: home() });
+    return plan ? [{ address: t.address, text: plan.text }] : [];
+  });
+}
+
+export async function resumeAgents() {
+  const found = orphanedAgents();
+  if (!found.length) return notify({ title: "No agents to resume", level: "info", timeout: 2500 });
+  for (const f of found) await exec("hc", ["send", f.address, f.text]);
+  notify({ title: `Resuming ${found.length} agent${found.length === 1 ? "" : "s"}`, level: "info", timeout: 2500 });
 }

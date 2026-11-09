@@ -4,7 +4,7 @@ import { LAUNCHERS } from "./accounts.js";
 import { Sidebar, Launcher } from "./sidebar.js";
 import { PanelToggle, showPanel } from "./toolbar.js";
 import { PanelBar, FileFinder, CheckoutMenu, openFinder, openCheckoutsHere } from "./panelbar.js";
-import { nextWaiting, worktrees } from "./commands.js";
+import { nextWaiting, worktrees, resumeAgents, orphanedAgents } from "./commands.js";
 import { Handoff, openHandoff, handoffFrom, closeHandedOff } from "./handoff.js";
 import { Fallback } from "./fallback.js";
 import { loadKeys } from "./ui.js";
@@ -31,6 +31,14 @@ export default class Relevo extends View {
       cx.spawn(async (cx) => {
         for (;;) this.command(await nextCommand(), cx);
       });
+      // Once per start, after the core has reported its terminals: shells that lost their agent (a reboot).
+      let offered = false;
+      cx.timer.every(3000, () => {
+        const n = offered ? 0 : orphanedAgents().length;
+        if (!n) return;
+        offered = true;
+        notify({ title: `${n} agent${n === 1 ? "" : "s"} to resume`, body: "Click to resume them", level: "info", action: { name: "relevo.resume-agents", args: {} } });
+      });
     }
   }
 
@@ -39,6 +47,9 @@ export default class Relevo extends View {
     if (name === "find-file") openFinder();
     else if (name === "next-waiting") nextWaiting();
     else if (name === "handoff") openHandoff();
+    else if (name === "resume-agents") cx.spawn(async () => {
+      await resumeAgents();
+    });
     else if (name === "checkouts") cx.spawn(async () => {
       await openCheckoutsHere();
     });

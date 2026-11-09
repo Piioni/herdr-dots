@@ -61,8 +61,14 @@ export const LAUNCHERS = [
             "wait": "watch", "bg": "⧗ 1 shell", "account": "work", "transcript": "/t.jsonl",
         })
 
-    def test_session_end_clears_every_label(self):
-        self.assertEqual(set(hook.labels({"hook_event_name": "SessionEnd"}, "work").values()), {""})
+    def test_a_chosen_session_end_clears_every_label(self):
+        end = {"hook_event_name": "SessionEnd", "reason": "prompt_input_exit"}
+        self.assertEqual(set(hook.labels(end, "work").values()), {""})
+
+    def test_an_unchosen_session_end_keeps_the_session_to_resume(self):
+        values = hook.labels({"hook_event_name": "SessionEnd", "reason": "other", "transcript_path": "/x.jsonl"}, "work")
+        self.assertEqual(values, {"wait": "", "bg": ""})
+        self.assertEqual(hook.labels({"hook_event_name": "SessionEnd"}, "work"), {"wait": "", "bg": ""})
 
     def test_a_hook_outside_herdr_does_nothing(self):
         with patch.dict(os.environ, clear=True), patch.object(hook.subprocess, "run") as run:

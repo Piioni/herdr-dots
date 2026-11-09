@@ -18,6 +18,7 @@ from collections import Counter
 
 EVENTS = ("SessionStart", "Stop", "SessionEnd")
 NAME = "relevo-labels.py"
+CHOSEN_ENDS = ("prompt_input_exit", "logout", "clear", "resume", "bypass_permissions_disabled")
 ACCOUNT = re.compile(r'key:\s*"([^"]+)"[^{}]*?claudeDir:\s*"([^"]+)"')
 SCRIPT = os.path.realpath(__file__)
 
@@ -58,7 +59,9 @@ def pending(data):
 def labels(data, account):
     """The labels for one hook event; an empty value removes a label."""
     if data.get("hook_event_name") == "SessionEnd":
-        return {k: "" for k in ("wait", "bg", "account", "transcript")}
+        # An end nobody chose (shutdown, killed terminal) keeps the session, so the mod can offer to resume it.
+        chosen = data.get("reason") in CHOSEN_ENDS
+        return {k: "" for k in (("wait", "bg", "account", "transcript") if chosen else ("wait", "bg"))}
     wait, bg = pending(data)
     return {
         "wait": wait or "", "bg": bg or "", "account": account or "",
