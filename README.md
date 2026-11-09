@@ -14,8 +14,9 @@ files (layouts, mods, keys, settings), so this folder *is* the app's look and be
 | [`prs`](mods/prs) | GitHub pull requests: a panel and a full PR dialog | ![](mods/prs/screenshot.png) |
 | [`linear`](mods/linear) | Your Linear tickets as a panel | ![](mods/linear/screenshot.png) |
 | [`tasks`](mods/tasks) | The scripts in a repo's `.tasks/` as background tasks: groups, hot reload, results and a worktree selector | ![](mods/tasks/screenshot.png) |
-| [`ion-files`](mods/ion-files) | File tree with file operations and Helix | ![](mods/ion-files/screenshot.png) |
-| [`ion-changes`](mods/ion-changes) | Uncommitted changes, Neovim diffs and a commit box | ![](mods/ion-changes/screenshot.png) |
+| [`ion-files`](mods/ion-files) | File tree with file operations and Neovim | ![](mods/ion-files/screenshot.png) |
+| [`ion-changes`](mods/ion-changes) | Uncommitted changes, scopes (branch, commit) and a commit box | ![](mods/ion-changes/screenshot.png) |
+| [`ion-diff`](mods/ion-diff) | A file's diff in a tab or popup: line numbers, syntax colors, folded context, ask an agent | |
 | [`ion-tabs`](mods/ion-tabs) | The tab bar and the panel buttons | ![](mods/ion-tabs/screenshot.png) |
 
 Each mod has its own README with what it does, why it exists, what it needs and how to test it.
@@ -60,8 +61,8 @@ optional: ask me if I want to use it or only some of its pieces.
 | `gh` ([GitHub CLI](https://cli.github.com/)), logged in | `prs` |
 | Linear API key in `~/.config/linear/token` | `linear`, the Linear chip in `prs` |
 | `hc` ([herdr-core](https://herdr.dev)), `git`, and scripts in each repo's `.tasks/` | `tasks` |
-| `hx` (Helix) | `ion-files` |
-| `git` and `nvim` | `ion-changes` |
+| `nvim` (Neovim) | `ion-files` |
+| `git` (and `nvim` for the Neovim actions) | `ion-changes`, `ion-diff` |
 | Claude Code, and optionally its hook (`mods/relevo/hooks`) | account usage, the account circle, background work |
 | Edit `mods/relevo/config.js` (or use Settings) | your accounts and launchers: the checked-in one is mine |
 
