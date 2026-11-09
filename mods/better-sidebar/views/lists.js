@@ -5,7 +5,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { agents, focused, theme, setAgentOrder } from "herdr";
 import { Spaces } from "./spaces.js";
 import { Agents } from "./agents.js";
-import { TEXT, Badge, Rail } from "./ui.js";
+import { TEXT, Rail } from "./ui.js";
 
 const TABS = ["spaces", "agents"];
 
@@ -100,35 +100,31 @@ export class Lists {
       h_flex()
         .id(`lists-tab-${id}`)
         .px(10)
-        .h(24)
+        .h(28)
         .gap(5)
         .justify_center()
         .items_center()
         .rounded(6)
         .cursor_pointer()
-        .text_size(TEXT.label)
-        .font_medium()
-        .text_color(this.tab === id ? t.foreground : t.dim)
-        .when(this.tab === id, (el) => el.bg(t.selected))
+        .text_size(12)
+        .bg(this.tab === id ? t.selected : "#00000000")
+        .text_color(this.tab === id ? t.foreground : t.muted)
+        .when(this.tab === id, (el) => el.font_medium())
         .when(this.tab !== id, (el) => el.hover((s) => s.bg(t.hover).text_color(t.foreground)))
         .on_click((_e, cx) => this.pick(id, cx))
         .child(label)
-        // The count badge the group headers use.
-        .when(count !== null, (el) => el.child(Badge(count)));
+        .when(count !== null, (el) => el.child(h_flex().h(16).px(5).items_center().justify_center().rounded(4).bg(t.raised).text_size(11).font_normal().text_color(t.muted).child(String(count))));
     return h_flex()
+      .h(40)
       .px(8)
-      .pt(6)
-      .pb(6)
       .mb(4)
-      .border_b(1)
+      .border_t(1)
       .border_color(t.border)
       .flex_none()
       .gap(6)
       .items_center()
       .child(
-        h_flex()
-          .flex_1()
-          .gap(2)
+        h_flex().flex_1().gap(2)
           .child(tab("spaces", "Spaces", null))
           .child(tab("agents", "Agents", view.count)),
       )

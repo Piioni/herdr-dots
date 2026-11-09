@@ -344,7 +344,7 @@ export class Spaces {
   grouped(t, collapsed) {
     const rows = this.ordered();
     // `under`, set by the lists view, adds rows beneath a space: its agents.
-    const draw = (r) => (collapsed ? [this.compact(r, t)] : [this.row(r, t), ...(this.under?.(r) ?? [])]);
+    const draw = (r, /** @type {number} */ index) => (collapsed ? [this.compact(r, t)] : [this.row(r, t).mt(index > 0 && !r.tree ? 8 : 0), ...(this.under?.(r) ?? [])]);
     const remote = [
       ...new Set([
         ...rows.map((r) => r.w.machine).filter(Boolean),

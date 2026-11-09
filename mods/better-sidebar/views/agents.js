@@ -658,8 +658,8 @@ export class Agents {
           .min_w(0)
           .gap(5)
           .items_center()
-          .child(div().min_w(0).truncate().text_color(lit ? t.foreground : t.muted).child(name))
-          .when(Boolean(prog) && prog !== name, (el) => el.child(this.programName(prog, t))),
+          .child(div().min_w(0).truncate().tooltip([name, prog !== name && prog].filter(Boolean).join(" · ")).text_color(lit ? t.foreground : t.muted).child(name))
+          .when(Boolean(prog) && prog !== name && !l?.program?.icon, (el) => el.child(this.programName(prog, t))),
       );
   }
 
@@ -697,8 +697,9 @@ export class Agents {
       .child(
         div()
           .min_w(0)
-          .max_w(namesSpace ? 140 : 200)
+          .when(namesSpace, (el) => el.max_w(140))
           .truncate()
+          .tooltip([name, prog !== name && prog].filter(Boolean).join(" · "))
           .text_color(idle ? t.muted : t.foreground)
           .child(name),
       )
@@ -706,8 +707,8 @@ export class Agents {
       .when(namesSpace && Boolean(a.space_name), (el) =>
         el.child(div().flex_1().min_w(0).truncate().text_size(TEXT.caption).text_color(t.dim).child(a.space_name)),
       )
-      // Under its space, the program instead.
-      .when(view.nested && Boolean(prog) && prog !== name, (el) => el.child(this.programName(prog, t)));
+      // Under its space, show the program only when its icon is missing.
+      .when(view.nested && Boolean(prog) && prog !== name && !a.program?.icon, (el) => el.child(this.programName(prog, t)));
   }
 
   // The fold chevron; folded, the count too, colored by the most urgent one.
