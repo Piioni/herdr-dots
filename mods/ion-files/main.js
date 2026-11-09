@@ -2,7 +2,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, props, shared, window } from "herdr";
 import { iconFor } from "./icons.js";
-import { helixTab, helixPopup } from "./hx.js";
+import { neovimTab, neovimPopup } from "./terminal.js";
 import { FileEditor } from "./editor.js";
 import { FileMenu, NameDialog, TrashConfirm, openMenu } from "./actions.js";
 import { FileView } from "./view.js";
@@ -161,10 +161,10 @@ export class Files {
     this.editor.load(cx, p => readTextFile(p, { on: this.on }));
   }
   /** @param {string} path @param {boolean} popup @param {AsyncContext} cx */
-  openInHelix(path, popup, cx) {
+  openInNeovim(path, popup, cx) {
     if (!this.root) return;
     const abs = `${this.root}/${path}`;
-    if (popup && !this.on) helixPopup(this.root, abs, cx); else helixTab(this.root, abs);
+    if (popup && !this.on) neovimPopup(this.root, abs, cx); else neovimTab(this.root, abs);
   }
   /** @param {AsyncContext} cx */
   back(cx) { if (this.editor?.dirty) this.leaving = true; else this.show(null); cx.notify(); }
@@ -182,7 +182,7 @@ export class Files {
       for (const f of [...this.folders]) if (isUnder(f, e.path)) this.folders.delete(f);
     } else {
       for (let f = e.kind === "folder" ? e.path : parentOf(e.path); f; f = parentOf(f)) this.folders.add(f);
-      if (e.kind === "open") this.openInHelix(e.path, false, cx);
+      if (e.kind === "open") this.openInNeovim(e.path, false, cx);
     }
     this.refresh(cx);
   }
@@ -194,7 +194,7 @@ export class Files {
       const path = prefix ? `${prefix}/${entry.name}` : entry.name, open = this.folders.has(path), mark = this.marks[`${this.root}/${path}`];
       if (!this.isTracked(path, entry.dir)) continue;
       out.push(h_flex().id(`file-${path}`).h(30).flex_none().pl(8 + depth * 18).pr(8).gap(8).items_center().rounded(7).cursor_pointer().hover(s => s.bg(t.hover))
-        .on_click((e, cx) => entry.dir ? this.toggle(path, cx) : this.openInHelix(path, e.modifiers.shift, cx))
+        .on_click((e, cx) => entry.dir ? this.toggle(path, cx) : this.openInNeovim(path, e.modifiers.shift, cx))
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openMenu({ root: this.root, path, dir: entry.dir, local: !this.on }); })
         .child(entry.dir ? svg(`mods/ion-files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
         .child(image(iconFor(entry.name, entry.dir, open)).size(18).flex_none())
@@ -213,9 +213,10 @@ export class Files {
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .when(Boolean(this.file), el => el.child(div().id("files-back").w(20).cursor_pointer().text_color(t.muted).on_click((_e, cx) => this.back(cx)).child("←")))
         .child(div().font_semibold().child("Files"))
-        .child(h_flex().p(2).gap(2).rounded(8).border_1().border_color(t.border).children([[false, "All"], [true, "Tracked"]].map(([on, label]) =>
-          div().id(`files-${label}`).h(22).px(10).flex().items_center().rounded(6).text_size(11).cursor_pointer()
-            .when(this.trackedOnly === on, el => el.bg(t.selected).text_color(t.foreground)).when(this.trackedOnly !== on, el => el.text_color(t.muted).hover(s => s.text_color(t.foreground)))
+        .child(h_flex().flex_none().p(2).gap(2).rounded(8).bg(t.raised).children(/** @type {[boolean, string][]} */ ([[false, "All"], [true, "Tracked"]]).map(([on, label]) =>
+          div().id(`files-${label}`).h(24).px(10).flex().items_center().rounded(6).text_size(12).cursor_pointer()
+            .bg(this.trackedOnly === on ? t.selected : "#00000000").text_color(this.trackedOnly === on ? t.foreground : t.muted)
+            .when(this.trackedOnly === on, el => el.font_medium()).hover(s => s.text_color(t.foreground))
             .on_click((_e, cx) => this.setTrackedOnly(on, cx)).child(label))))
         .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).pop() ?? ""))
         .when(Boolean(ed), el => el.child(ed.controls(t))))

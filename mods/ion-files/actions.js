@@ -3,7 +3,7 @@ import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { exec, writeTextFile, props, openOverlay, closeOverlay, notify, theme, shared, setShared, window } from "herdr";
 import { nameError, join, baseName, parentOf, targetFolder } from "./lib/paths.js";
 import { trashArgs, revealArgs } from "./lib/platform.js";
-import { helixTab, helixPopup } from "./hx.js";
+import { neovimTab, neovimPopup } from "./terminal.js";
 
 /** @typedef {import("gpui-kit").AsyncContext} AsyncContext */
 /** @typedef {import("gpui-kit").Context} Context */
@@ -47,8 +47,8 @@ export class FileMenu {
     const ask = (mode) => () => openOverlay({ mod: "ion-files", kind: "dialog", width: 380, props: { role: "name", mode, root, path, dir } });
     const sep = () => div().h(1).my(4).mx(6).bg(t.border);
     return v_flex().id("file-menu").w_full().p(4).bg(t.popover ?? t.surface).text_color(t.foreground).text_size(12.5)
-      .when(!dir && !isRoot, (el) => el.child(item("open-tab", "Open in tab", () => helixTab(root, abs)))
-        .child(item("open-popup", "Open in popup", (cx) => local ? helixPopup(root, abs, cx) : helixTab(root, abs)))
+      .when(!dir && !isRoot, (el) => el.child(item("open-tab", "Open in tab", () => neovimTab(root, abs)))
+        .child(item("open-popup", "Open in popup", (cx) => local ? neovimPopup(root, abs, cx) : neovimTab(root, abs)))
         .child(sep()))
       .when(local, (el) => el.child(item("new-file", "New file", ask("new-file"))).child(item("new-folder", "New folder", ask("new-folder")))
         .when(!isRoot, (el) => el.child(item("rename", "Rename", ask("rename")))

@@ -1,13 +1,13 @@
 # ion-files
 
-A file tree for the folder you are working in, with file operations and Helix one click away.
+A file tree for the folder you are working in, with file operations and Neovim one click away.
 
 ![The Files panel](screenshot.png)
 
 ## What it does
 
 - **Tree** of the focused space's folder; folders load when expanded. Toggle **Tracked** (git-tracked files only) or **All**.
-- **Click a file** to open it in [Helix](https://helix-editor.com/) in a new tab (Shift-click: in a popup over the
+- **Click a file** to open it in [Neovim](https://neovim.io/) in a new tab (Shift-click: in a popup over the
   current tab). Click a folder to expand it.
 - **Right-click menu:** Open in tab / popup, New file, New folder, Rename, Move to Trash, Reveal in Folder, Copy path,
   Copy relative path. Trashing asks first.
@@ -30,7 +30,7 @@ through it (`props.role: "view"`).
 
 ## Requirements
 
-- `hx` (Helix) on `PATH` for opening files.
+- `nvim` (Neovim) on `PATH` for opening files.
 - Linux: `gio trash` to trash and `xdg-open` to reveal. (macOS: `/usr/bin/trash` and Finder; handled in `lib/platform.js`.)
 
 ## Files
@@ -39,7 +39,7 @@ through it (`props.role: "view"`).
 |---|---|
 | `main.js`, `view.js` | The tree and the single-file view |
 | `actions.js` | The right-click menu, name prompt, trash confirmation |
-| `editor.js`, `hx.js` | The built-in editor and the Helix tab/popup launchers |
+| `editor.js`, `terminal.js` | The built-in editor and the Neovim tab/popup launchers |
 | `lib/paths.js`, `lib/platform.js` | Path confinement and per-OS commands |
 | `icons.js`, `icons/` | Icon lookup and the icon set |
 
