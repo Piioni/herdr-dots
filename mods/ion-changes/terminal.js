@@ -27,5 +27,5 @@ export function openPopup(folder, argv, name, cx) {
 }
 
 const base = (file) => file.split("/").pop();
-export const helixTab = (folder, file) => openTab(folder, ["hx", file], base(file));
-export const helixPopup = (folder, file, cx) => openPopup(folder, ["hx", file], base(file), cx);
+export const neovimTab = (folder, file) => openTab(folder, ["nvim", file], base(file));
+export const neovimPopup = (folder, file, cx) => openPopup(folder, ["nvim", file], base(file), cx);
