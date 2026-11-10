@@ -346,9 +346,9 @@ export default class Changes extends View {
       { scope: "last", label: "Last commit", detail: i.last ? `${i.last}${i.subject ? ` · ${i.subject}` : ""}, plus uncommitted` : "HEAD has no parent", ok: Boolean(i.last) },
       { scope: "branch", label: i.base ? `vs ${i.base}` : "vs base branch", detail: i.merge ? `everything on ${i.branch} since it left ${i.base}` : i.base ? `on ${i.base} itself` : "no main or master branch", ok: Boolean(i.merge) },
     ];
-    const box = h_flex().id("scope-box").h(22).px(8).gap(6).items_center().rounded(6).border_1().border_color(this.choosingScope ? t.accent : t.border).bg(t.raised).cursor_pointer().hover((s) => s.bg(t.hover))
+    const box = h_flex().id("scope-box").h(28).min_w(0).px(8).gap(6).items_center().rounded(6).border_1().border_color(this.choosingScope ? t.accent : t.border).bg(t.background).cursor_pointer().hover((s) => s.bg(t.hover))
       .tooltip("What is shown: the uncommitted changes, the last commit, the whole branch, or one commit")
-      .child(div().text_size(11).truncate().child(this.scopeLabel())).child(div().text_size(9).text_color(t.dim).child("▾"));
+      .child(div().flex_1().min_w(0).text_size(12).truncate().child(this.scopeLabel())).child(div().flex_none().text_size(10).text_color(t.muted).child("▾"));
     const check = (on) => div().w(12).text_size(11).text_color(t.accent).child(on ? "✓" : "");
     const commits = (this.log ?? []).map((c) =>
       h_flex().id(`scope-commit-${c.sha}`).px(10).py(5).gap(8).items_center().rounded(6).cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.setScope("commit", cx, c.sha)).tooltip(`${c.short} · ${c.author} · ${c.when}\n${c.subject}`)
@@ -378,26 +378,27 @@ export default class Changes extends View {
       .on_key_down((e, cx) => {
         if (e.key === "escape" && this.typing) { this.typing = false; this.handle.focus(); cx.stop_propagation(); cx.notify(); }
       })
-      .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
-        .child(div().font_semibold().child("Changes"))
-        .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.files.length} files`))
-        .when(Boolean(this.root) && this.hasHead, (e) => e.child(this.scopePicker(t)))
-        .child(div().flex_1()).child(div().text_size(11).text_color(t.ansi2).child(`+${add}`)).child(div().text_size(11).text_color(t.ansi1).child(`−${del}`)))
-      .child(h_flex().h(40).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
+      .child(h_flex().min_h(42).flex_none().px(14).py(6).gap(8).items_center().flex_wrap().border_b(1).border_color(t.border)
+        .child(div().flex_none().font_semibold().child("Changes"))
+        .child(div().flex_none().text_size(11).text_color(t.muted).child(`${this.files.length} ${this.files.length === 1 ? "file" : "files"}`))
+        .when(Boolean(this.root) && this.hasHead, (e) => e.child(div().min_w(0).max_w(180).child(this.scopePicker(t))))
+        .child(div().flex_1().min_w(0))
+        .when(add > 0 || del > 0, (e) => e.child(h_flex().flex_none().gap(6).text_size(11).child(div().text_color(t.ansi2).child(`+${add}`)).child(div().text_color(t.ansi1).child(`−${del}`)))))
+      .when(this.files.length > 0, (e) => e.child(h_flex().min_h(40).flex_none().px(14).py(4).gap(8).items_center().flex_wrap().border_b(1).border_color(t.border)
         .child(this.seg(t, [["flat", "Flat"], ["folders", "Folders"]], this.view, (id, cx) => this.setView(id, cx)))
-        .child(div().flex_1())
+        .child(div().flex_1().min_w(0))
         .when(this.view === "folders" && this.files.length > 0, (e) => {
           const dirs = this.dirKeys(), all = dirs.length > 0 && dirs.every((d) => this.collapsed.has(d));
           if (!dirs.length) return e;
-          return e.child(div().id("collapse-all").h(22).px(8).flex().items_center().rounded(6).text_size(11).text_color(t.muted).cursor_pointer()
+          return e.child(div().id("collapse-all").h(28).px(8).flex().items_center().rounded(6).text_size(12).text_color(t.muted).cursor_pointer()
             .hover((s) => s.bg(t.hover).text_color(t.foreground))
             .on_click((_e, cx) => { this.collapsed = all ? new Set() : new Set(dirs); cx.notify(); }).child(all ? "Expand all" : "Collapse all"));
-        }))
+        })))
       // overflow_y_scrollbar() wraps the list, so its flex sizing never reached the panel's layout.
       .child(div().flex_1().min_h(0).relative()
         .child(v_flex().id("changes-list").absolute().inset_0().overflow_y_scroll().p(6)
           .children(this.view === "folders" ? this.entries(this.tree(), 0, t) : this.files.map((f) => this.row(f, t)))
-          .when(!this.files.length, (e) => e.child(div().p(8).text_color(t.dim).child(this.error || (this.loading ? "Loading changes…" : this.root ? (this.scope === "work" ? "No uncommitted changes" : "No changes in this scope") : "No folder")))))
+          .when(!this.files.length, (e) => e.child(div().px(8).py(12).text_size(12).text_color(t.muted).child(this.error || (this.loading ? "Loading changes…" : this.root ? (this.scope === "work" ? "No uncommitted changes" : "No changes in this scope") : "No folder")))))
         .child(Scrollbar.vertical("changes-list").absolute().inset_0()))
       .when(this.limited, el => el.child(div().px(12).py(4).text_size(11).text_color(t.dim).child("Showing the first 1,000 changed files")))
       .when(Boolean(this.note), (e) => e.child(div().px(10).pb(8).text_size(11).text_color(t.ansi1).child(this.note)))
