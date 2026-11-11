@@ -46,10 +46,12 @@ function lead(tab, all = panes()) {
 function title(tab, l) {
   const prog = l?.program?.name;
   const live = clean(l?.title);
+  // clean() would strip a path's leading ~ or /: test the title with only its status glyph gone.
+  const path = /^[~/]|^[A-Za-z]:\\/.test((l?.title ?? "").replace(/^[^\p{L}\p{N}~/]+/u, ""));
   const telling =
     live &&
     live !== prog &&
-    !/^[~/]|^[A-Za-z]:\\/.test(live) &&
+    !path &&
     !live.includes("@") &&
     live.toLowerCase() !== l?.program?.key;
   return tab.name === prog && telling ? live : tab.name;
