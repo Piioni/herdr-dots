@@ -10,7 +10,7 @@ files (layouts, mods, keys, settings), so this folder *is* the app's look and be
 | Mod | What it is | |
 |---|---|---|
 | [`relevo`](mods/relevo) | Accounts and their usage, launchers, handoff between accounts, the panel bar and Settings | ![](mods/relevo/accounts.png) |
-| [`relevo-agents`](mods/relevo-agents) | Herdr's Agents list + a launcher menu, an account circle and a background-work capsule | ![](mods/relevo-agents/screenshot.png) |
+| [`better-sidebar`](mods/better-sidebar) | Spaces and agents in one block: grouping, pins, account dots, background work and a launcher per space | ![](mods/better-sidebar/screenshot.png) |
 | [`prs`](mods/prs) | GitHub pull requests: a panel and a full PR dialog | ![](mods/prs/screenshot.png) |
 | [`linear`](mods/linear) | Your Linear tickets as a panel | ![](mods/linear/screenshot.png) |
 | [`tasks`](mods/tasks) | The scripts in a repo's `.tasks/` as background tasks: groups, hot reload, results and a worktree selector | ![](mods/tasks/screenshot.png) |
@@ -25,8 +25,10 @@ Each mod has its own README with what it does, why it exists, what it needs and 
 
 - `ion-*`: clones of Herdr's own mods (`files`, `changes`, `tabs`), improved. Herdr rewrites its shipped mods on every
   start, so changes to them have to live in a clone with another name.
-- `relevo`, `relevo-agents`: depend on the Relevo setup (accounts and launchers), and derive from
+- `relevo`: depends on the Relevo setup (accounts and launchers), and derives from
   [herdr-relevo](https://github.com/johnny4young/herdr-relevo).
+- `better-sidebar`: [munza's Better Sidebar](https://github.com/munza/herdr-mods/tree/main/better-sidebar) with the
+  Relevo pieces brought in. It replaces the old `relevo-agents`.
 - `prs`, `linear`, `tasks`: my own.
 
 ## Get it yourself
@@ -39,10 +41,10 @@ Herdr app, asking me what I want. Go mod by mod: read its README, tell me what i
 and ask whether I want it. Only add the ones I say yes to, and never replace my keys.json, settings.json
 or layouts without asking.
 
-Be careful with relevo and relevo-agents: they are built around one person's workflow (provider accounts,
+Be careful with relevo and better-sidebar: they are built around one person's workflow (provider accounts,
 launchers, and Claude/Pi/Codex profiles), so do not copy mods/relevo/config.js as it is. If I want them,
 explain what accounts, launchers and profiles are, ask me which ones I have, and write a config for me.
-The account circle and the background-work capsule need the Claude Code hook in mods/relevo/hooks: explain
+better-sidebar's account dots and background-work capsule need the Claude Code hook in mods/relevo/hooks: explain
 what it does and ask before installing it.
 
 prs needs the GitHub CLI (gh) logged in. linear needs a Linear API key in ~/.config/linear/token: ask me
@@ -63,7 +65,7 @@ optional: ask me if I want to use it or only some of its pieces.
 | `hc` ([herdr-core](https://herdr.dev)), `git`, and scripts in each repo's `.tasks/` | `tasks` |
 | `nvim` (Neovim) | `ion-files` |
 | `git` (and `nvim` for the Neovim actions) | `ion-changes`, `ion-diff` |
-| Claude Code, and optionally its hook (`mods/relevo/hooks`) | account usage, the account circle, background work |
+| Claude Code, and optionally its hook (`mods/relevo/hooks`) | account usage, the account dots, background work |
 | Edit `mods/relevo/config.js` (or use Settings) | your accounts and launchers: the checked-in one is mine |
 
 ## What is versioned

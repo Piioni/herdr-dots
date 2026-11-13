@@ -47,8 +47,8 @@ no credentials are stored.
 
 - Edit `config.js` (or use Settings). `config.example.js` shows the shape.
 - Optional **hook** `hooks/relevo-labels.py` for Claude Code (SessionStart, Stop, SessionEnd): it only sets terminal
-  labels (`agent.account`, `agent.transcript`, `agent.wait`, `agent.bg`) that power the account circle and the
-  background-work capsule in [`relevo-agents`](../relevo-agents) and handoffs. Runbook: [`hooks/HOOK.md`](hooks/HOOK.md).
+  labels (`agent.account`, `agent.transcript`, `agent.wait`, `agent.bg`) that power the account dots and the
+  background-work capsule in [`better-sidebar`](../better-sidebar) and handoffs. Runbook: [`hooks/HOOK.md`](hooks/HOOK.md).
 - Claude usage comes from each account's own login (`.credentials.json` in its config folder); Codex from its auth file.
   Tokens stay in memory and are only sent as the provider's `Authorization` header.
 

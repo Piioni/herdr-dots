@@ -4,12 +4,15 @@ This project is licensed under the Apache License, Version 2.0 (see LICENSE).
 
 Parts of it are derived from other Apache-2.0 work:
 
-- mods/relevo, mods/relevo-agents and mods/ion-files derive from
+- mods/relevo and mods/ion-files derive from
   herdr-relevo (https://github.com/johnny4young/herdr-relevo, Apache-2.0).
   Changes: Linux behavior (bash launchers, Claude credential files, GNU stat,
   gio trash), separate accounts and launchers in Settings, a smaller scope
   (Inbox, PR review and time ledger removed), Linear and GitHub PR panels
   living in their own mods.
-- mods/relevo-agents, mods/ion-files, mods/ion-changes and mods/ion-tabs derive
+- mods/ion-files, mods/ion-changes and mods/ion-tabs derive
   from the agents, files, changes and tabs mods that ship with Herdr
   (Apache-2.0). See each mod's README for what changed.
+- mods/better-sidebar derives from Better Sidebar in munza/herdr-mods
+  (https://github.com/munza/herdr-mods, Apache-2.0). Changes: Relevo account
+  dots, handoff, background-work capsule and launcher, and a polished header.
