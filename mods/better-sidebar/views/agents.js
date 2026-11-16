@@ -36,7 +36,8 @@ function toggleSidebar() {
   });
 }
 
-const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+// Drops a status glyph, keeps a leading bracket or quote (as the shipped agents mod).
+const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").replace(/^\[ [!.] \] /, "").trim();
 
 function lead(tab, all = panes()) {
   const mine = all.filter((p) => p.tab === tab.id && p.terminal);
@@ -54,7 +55,7 @@ function title(tab, l) {
     !path &&
     !live.includes("@") &&
     live.toLowerCase() !== l?.program?.key;
-  return tab.name === prog && telling ? live : tab.name;
+  return (tab.name === prog || !tab.named) && telling ? live : tab.name;
 }
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
@@ -150,8 +151,13 @@ export class Agents {
     this.sortFocus = cx.focus_handle();
     this.folded = new Set();
     // Each agent's last state and when it changed (ms), kept across restarts.
-    this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
-    this.pendingPins = /** @type {string[]} */ (JSON.parse(localStorage.getItem("pins") ?? "[]"));
+    const saved = (key, fallback) => {
+      try { return JSON.parse(localStorage.getItem(key) ?? "null") ?? fallback; } catch { return fallback; }
+    };
+    this.changed = saved("changed", {});
+    if (typeof this.changed !== "object" || Array.isArray(this.changed)) this.changed = {};
+    this.pendingPins = /** @type {string[]} */ (saved("pins", []));
+    if (!Array.isArray(this.pendingPins)) this.pendingPins = [];
     this.migratingPins = new Set();
     cx.timer.every(30000, (/** @type {any} */ cx) => cx.notify());
   }

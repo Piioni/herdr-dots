@@ -1,7 +1,7 @@
 // The spaces list: right-aligned branches, nested worktrees and a PR status line.
 // Repository facts follow each space's first terminal.
 import { div } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import {
   spaces,
   machines,
@@ -78,6 +78,9 @@ export class Spaces {
     this.over = null;
     this.machines = [];
     this.folded = new Set();
+    // The active space's place among the list's direct children, so the list can scroll it into view.
+    this.scroll = ScrollHandle.new();
+    this.activeAt = -1;
     try {
       this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
     } catch {
@@ -344,7 +347,12 @@ export class Spaces {
   grouped(t, collapsed) {
     const rows = this.ordered();
     // `under`, set by the lists view, adds rows beneath a space: its agents.
-    const draw = (r, /** @type {number} */ index) => (collapsed ? [this.compact(r, t)] : [this.row(r, t).mt(index > 0 && !r.tree ? 8 : 0), ...(this.under?.(r) ?? [])]);
+    const out = [];
+    const draw = (r, /** @type {number} */ index) => {
+      if (r.w.active) { this.activeAt = out.length; this.activeSpace = r.w.id; }
+      out.push(...(collapsed ? [this.compact(r, t)] : [this.row(r, t).mt(index > 0 && !r.tree ? 8 : 0), ...(this.under?.(r) ?? [])]));
+    };
+    this.activeAt = -1;
     const remote = [
       ...new Set([
         ...rows.map((r) => r.w.machine).filter(Boolean),
@@ -352,20 +360,18 @@ export class Spaces {
       ]),
     ].sort();
     if (!remote.length) {
-      return this.machineLoading(null) && !rows.length
-        ? [this.loadingRow(null, t, collapsed)]
-        : rows.flatMap(draw);
+      if (this.machineLoading(null) && !rows.length) return [this.loadingRow(null, t, collapsed)];
+      rows.forEach(draw);
+      return out;
     }
-    return [null, ...remote].flatMap((m) => {
-      const head = this.machineHeader(m, t, collapsed);
-      if (this.folded.has(m)) return [head];
+    for (const m of [null, ...remote]) {
+      out.push(this.machineHeader(m, t, collapsed));
+      if (this.folded.has(m)) continue;
       const mine = rows.filter((r) => (r.w.machine ?? null) === m);
-      if (mine.length) return [head, ...mine.flatMap(draw)];
-      const placeholder = this.machineLoading(m)
-        ? this.loadingRow(m, t, collapsed)
-        : this.newSpaceRow(m, t, collapsed);
-      return [head, placeholder];
-    });
+      if (mine.length) mine.forEach(draw);
+      else out.push(this.machineLoading(m) ? this.loadingRow(m, t, collapsed) : this.newSpaceRow(m, t, collapsed));
+    }
+    return out;
   }
 
   machineLoading(m) {
@@ -802,6 +808,15 @@ export class Spaces {
   }
 
   body(t, collapsed) {
+    const above = this.above?.() ?? [];
+    const rows = this.grouped(t, collapsed);
+    const at = this.activeAt >= 0 ? above.length + this.activeAt : -1;
+    // Reveal only when the active space or its place changes, so manual scrolling isn't undone.
+    if (at !== this.revealedAt || this.activeSpace !== this.revealedSpace) {
+      this.revealedAt = at;
+      this.revealedSpace = this.activeSpace;
+      if (at >= 0) this.scroll.scroll_to_item(at);
+    }
     return v_flex()
       .id("spaces-list")
       .flex_1()
@@ -810,11 +825,12 @@ export class Spaces {
       .pb(14)
       .overflow_y_scrollbar()
       .mode("always")
+      .track_scroll(this.scroll)
       .on_mouse_up("left", (_e, cx) => {
         this.pressed = null;
         cx.notify();
       })
-      .children(this.above?.() ?? [])
-      .children(this.grouped(t, collapsed));
+      .children(above)
+      .children(rows);
   }
 }
