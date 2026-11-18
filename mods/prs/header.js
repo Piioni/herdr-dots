@@ -11,7 +11,8 @@ import { tone, plural } from "./ui.js";
 const TABS = [["conversation", "Conversation"], ["commits", "Commits"], ["files", "Files changed"], ["checks", "Checks"]];
 const SPINNER = "mods/workspace-chrome/spinner.svg";
 
-const since = (at) => { const s = Math.max(0, Math.floor((Date.now() - at) / 1000)); return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)}m ago` : `${Math.floor(s / 3600)}h ago`; };
+// Minute steps on purpose: the dialog only redraws when this text changes.
+export const since = (at) => { const s = Math.max(0, Math.floor((Date.now() - at) / 1000)); return s < 60 ? "just now" : s < 3600 ? `${Math.floor(s / 60)}m ago` : `${Math.floor(s / 3600)}h ago`; };
 
 function iconButton(v, id, glyph, tip, t, onClick) {
   return div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(7).border_1().border_color(t.border).cursor_pointer()

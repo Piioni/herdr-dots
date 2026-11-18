@@ -8,8 +8,10 @@ GitHub pull requests as a panel in Herdr, with a full PR dialog one click away.
 
 ## What it does
 
-- **Panel.** Lists the PRs of the repository you are working in under **Open / Merged / Closed**, with filter chips
+- **Panel.** Lists the PRs of the repository you are working in under **Open / Stacked / Merged / Closed**, with filter chips
   (All, Mine, Needs review, Being reviewed, Asked of me, Drafts) and a search box. Open PRs are grouped by what they need.
+- **Stacks.** A PR whose base is another open PR's branch hangs under it on an elbow, with an `on #N` chip; one aimed at
+  a branch other than the trunk shows `→ base`. The Stacked tab lists only those, and a toggle hides stacked PRs from Open.
 - **One glance per row.** Title, number, author, age, CI state, merge conflicts, new commits since you last looked,
   reviewers, the last feedback someone else left, and lines added and removed.
 - **Review state that stays honest.** A review verdict only counts for the commit it reviewed: push new commits and the PR

@@ -1,7 +1,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, focused, exec, run, layout, theme, notify, props, shared, setShared, openOverlay } from "herdr";
-import { normalize, reviewOf, counts, shown, grouped, SCOPES, CHIPS } from "./model.js";
+import { normalize, reviewOf, counts, shown, grouped, stacked, nest, SCOPES, CHIPS } from "./model.js";
 import { avatar } from "./people.js";
 import { shown as handle } from "./timeline.js";
 import { icons, icon } from "./icons.js";
@@ -9,12 +9,20 @@ import { Viewer } from "./viewer.js";
 import { Menu, openMenu } from "./menu.js";
 
 const REFRESH = 60000;
-const BASIC = "number,title,url,author,assignees,isDraft,labels,updatedAt,headRefName,headRefOid,baseRefName,additions,deletions,changedFiles";
+const BASIC = "number,title,url,author,assignees,isDraft,labels,updatedAt,isCrossRepository,headRefName,headRefOid,baseRefName,additions,deletions,changedFiles";
 // What the open list needs to judge a PR; merged and closed ones are only listed, so they skip the heavy review, comment and check data.
 const FIELDS = { open: `${BASIC},reviewRequests,latestReviews,comments,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup`, merged: BASIC, closed: BASIC };
 // A change of focus or panel re-uses a list this young instead of asking GitHub again.
 const FRESH = 15000;
-const STATES = { open: { label: "Open", limit: 100 }, merged: { label: "Merged", limit: 40 }, closed: { label: "Closed", limit: 30 } };
+// How long a folder found outside any repo is not asked about again.
+const MISS = 600000;
+// Open lists kept between runs, for the most recently refreshed repos.
+const KEPT = 3;
+const STATES = { open: { label: "Open", limit: 100 }, stacked: { label: "Stacked" }, merged: { label: "Merged", limit: 40 }, closed: { label: "Closed", limit: 30 } };
+// Stacked is a view of the open list, not a list of its own.
+const src = (state) => (state === "stacked" ? "open" : state);
+// In a stack: on another PR, carrying one, or aimed at a branch other than the trunk.
+const inStack = (prs) => { const parents = new Set(prs.map((p) => p.parent)); return (p) => p.parent || parents.has(p.number) || p.offTrunk; };
 const REVIEW = { approved: ["Approved", "ansi2", "check"], changes: ["Changes requested", "ansi1", "x"], needs: ["Needs review", "ansi3", "eye"], draft: ["Draft", "muted", "draft"] };
 const MERGE = { conflicts: ["Conflicts", "ansi1", "alert"], behind: ["Behind", "ansi3", "alert"], clean: ["Clean", "ansi2", "check"], unknown: ["Checking", "muted", "dot"] };
 const CI = { passing: ["CI", "ansi2", "check"], failing: ["CI failing", "ansi1", "x"], pending: ["CI running", "ansi3", "dot"] };
@@ -36,7 +44,7 @@ function find(node, id) {
 // Best effort: on failure reviews keep no commit and are treated as current. Returns why it failed, or null.
 async function reviewCommits(repo, raw, on) {
   const [owner, name] = repo.split("/");
-  const query = `query($o:String!,$n:String!){repository(owner:$o,name:$n){pullRequests(states:OPEN,first:100){nodes{number latestReviews(first:30){nodes{author{login} commit{oid}}} commits(last:30){nodes{commit{oid parents{totalCount}}}}}}}}`;
+  const query = `query($o:String!,$n:String!){repository(owner:$o,name:$n){pullRequests(states:OPEN,first:100,orderBy:{field:CREATED_AT,direction:DESC}){nodes{number latestReviews(first:30){nodes{author{login} commit{oid}}} commits(last:30){nodes{commit{oid parents{totalCount}}}}}}}}`;
   try {
     const r = await exec("gh", ["api", "graphql", "-f", `query=${query}`, "-f", `o=${owner}`, "-f", `n=${name}`], { on });
     if (r.code !== 0) return (r.stderr || r.stdout).trim().split("\n")[0] || "gh failed";
@@ -56,7 +64,7 @@ async function reviewCommits(repo, raw, on) {
 }
 
 // The PR dialog beats while open (see Viewer): the list behind it has no reason to change.
-const dialogOpen = () => Date.now() - Number(shared("prs.dialog") ?? 0) < 8000;
+const dialogOpen = () => Date.now() - Number(shared("prs.dialog") ?? 0) < 75000;
 const idle = () => hidden() || dialogOpen();
 
 // Nothing to fetch while another panel (or none) is showing.
@@ -99,16 +107,17 @@ export default class Prs extends View {
       return;
     }
     this.scope = SCOPES[remembered("scope")] ? remembered("scope") : "all";
-    if (!shared("prs.chip")) setShared("prs.chip", remembered("chip", {}));
     this.state = STATES[remembered("state")] ? remembered("state") : "open";
     this.query = "";
     this.fold = new Set(remembered("fold", []));
+    // Open view: show PRs that sit on another PR, or leave them to the Stacked tab.
+    this.showStacked = remembered("showStacked", true);
     // repo -> state -> { prs, at }. Open lists are kept between runs so the panel shows them at once while the fresh ones load.
     this.lists = remembered("lists", {});
     // A pinned repo is shown whatever the focus: { repo, on }.
     this.pinned = remembered("pinned", null);
     this.repos = remembered("repos", {}); this.logins = remembered("logins", {}); this.spaceRepos = remembered("spaces", {});
-    this.repo = null; this.last = null;
+    this.repo = null; this.last = null; this.errors = {}; this.misses = {};
     this.input = InputState.new({ placeholder: "Filter pull requests" });
     this.input.on("change", (_e, cx) => { this.query = this.input.value(); cx.notify(); });
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
@@ -132,11 +141,12 @@ export default class Prs extends View {
   where() { return (this.last = location(this.last)); }
   context() { return JSON.stringify([this.where(), focused()?.space]); }
 
+  // A folder outside any repo is remembered as a miss for a while, so it isn't asked again on every refresh.
   async repoFor(cwd, on) {
     const id = JSON.stringify([cwd, on]);
-    if (!this.repos[id]) {
+    if (!this.repos[id] && !(Date.now() - (this.misses[id] ?? 0) < MISS)) {
       const r = await exec("gh", ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], { cwd, on });
-      if (r.code === 0) { this.repos[id] = r.stdout.trim(); keep("repos", this.repos); }
+      if (r.code === 0) { this.repos[id] = r.stdout.trim(); keep("repos", this.repos); } else this.misses[id] = Date.now();
     }
     return this.repos[id] ?? null;
   }
@@ -162,27 +172,30 @@ export default class Prs extends View {
 
   // maxAge: keep a list younger than this (ms) instead of fetching it again; 0 always fetches.
   refresh(cx, state = this.state, maxAge = 0) {
+    state = src(state);
     const { cwd, on } = this.where(), context = this.context(), space = focused()?.space;
-    if (context !== this.ctx) { this.ctx = context; this.error = null; this.pick(cwd ? this.repos[JSON.stringify([cwd, on])] : null, space, on); }
+    if (context !== this.ctx) { this.ctx = context; this.errors = {}; this.pick(cwd ? this.repos[JSON.stringify([cwd, on])] : null, space, on); }
     if (this.syncing) { this.again = true; return; }
     this.syncing = true; cx.notify();
     cx.spawn(async (cx) => {
       try {
         const found = cwd ? await this.repoFor(cwd, on) : null;
+        // The focus moved while gh answered: this fetch is for a place no longer shown; the queued refresh takes over.
+        if (this.ctx !== context) { this.again = true; return; }
         this.pick(found, space, on);
         const repo = this.repo;
         if (!repo) return;
         const have = this.lists[repo]?.[state];
-        if (have && Date.now() - have.at < maxAge) { this.error = null; return; }
+        if (have && Date.now() - have.at < maxAge) { delete this.errors[state]; return; }
         this.me = await this.login(this.repoOn);
         const r = await exec("gh", ["pr", "list", "-R", repo, "--state", state, "--limit", String(STATES[state].limit), "--json", FIELDS[state]], { on: this.repoOn });
         if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
         const raw = JSON.parse(r.stdout);
         if (state === "open") this.notice = await reviewCommits(repo, raw, this.repoOn);
-        (this.lists[repo] ??= {})[state] = { prs: raw.map((p) => normalize(p, state)), at: Date.now() };
-        keep("lists", Object.fromEntries(Object.entries(this.lists).map(([k, v]) => [k, v.open ? { open: v.open } : {}])));
-        this.error = null;
-      } catch (e) { this.error = String(e?.message ?? e); }
+        (this.lists[repo] ??= {})[state] = { prs: (state === "open" ? stacked : (x) => x)(raw.map((p) => normalize(p, state))), at: Date.now() };
+        keep("lists", Object.fromEntries(Object.entries(this.lists).filter(([, v]) => v.open).sort(([, a], [, b]) => b.open.at - a.open.at).slice(0, KEPT).map(([k, v]) => [k, { open: v.open }])));
+        delete this.errors[state];
+      } catch (e) { if (this.ctx === context) this.errors[state] = String(e?.message ?? e); }
       finally {
         this.syncing = false; cx.notify();
         if (this.again) { this.again = false; this.refresh(cx); }
@@ -228,6 +241,17 @@ export default class Prs extends View {
       .child(label).when(count !== null, (e) => e.child(div().text_size(11).font_normal().text_color(t.dim).child(String(count))));
   }
 
+  // Show or hide the PRs stacked on another PR in the Open view.
+  stackToggle(t) {
+    const on = this.showStacked;
+    return h_flex().id("prs-stacked-toggle").h(24).px(8).gap(6).flex_none().items_center().rounded(6).text_size(12).cursor_pointer()
+      .bg(on ? `${t.ansi5}24` : "#00000000").text_color(on ? t.ansi5 : t.muted).border_1().border_color(on ? `${t.ansi5}66` : t.border)
+      .hover((s) => s.text_color(on ? t.ansi5 : t.foreground)).tooltip(on ? "Hide PRs stacked on another PR" : "Show PRs stacked on another PR")
+      .on_click((_e, cx) => { this.showStacked = !on; keep("showStacked", this.showStacked); cx.notify(); })
+      .child(div().size(12).flex_none().when(this.icons, (e) => e.child(svg(icon("stack")).size(12))))
+      .child("Stacked");
+  }
+
   // One button for every filter: it names the active one and opens the list in a popup.
   filterView(chip, c, chips, t) {
     const on = chip !== "all", label = CHIPS[this.scope][chip].label, tone = CHIP_TONES[chip], cur = shared("prs.chip") ?? {};
@@ -256,6 +280,9 @@ export default class Prs extends View {
     const mine = this.scope === "mine";
     const [mergeLabel, mergeTone, mergeGlyph] = MERGE[p.merge];
     const tags = [];
+    const cut = (s) => (s.length > 26 ? `${s.slice(0, 25)}…` : s);
+    if (p.parent) tags.push(this.tag(`sk-${p.number}`, t, t.ansi5, `on #${p.parent}`, "stack", `Stacked on #${p.parent} ${p.parentTitle}\n${p.head} → ${p.base}`));
+    else if (p.offTrunk) tags.push(this.tag(`sk-${p.number}`, t, t.ansi5, `→ ${cut(p.base)}`, "branch", `Targets ${p.base}, not ${p.trunk}`));
     if (open) {
       if (!implied) tags.push(this.tag(`rv-${p.number}`, t, t[tone], label, glyph));
       if (!p.draft) tags.push(this.tag(`mg-${p.number}`, t, t[mergeTone], mergeLabel, mergeGlyph, `${p.head} → ${p.base}`, ["clean", "unknown"].includes(p.merge)));
@@ -322,9 +349,15 @@ export default class Prs extends View {
       .child(div().text_size(11).text_color(t.dim).child(String(count)));
   }
 
-  // Rows with a hairline between them.
+  // Rows with a hairline between them; a stacked PR hangs under its parent on an elbow.
   rows(prs, t, cx, implied) {
-    return prs.flatMap((p, i) => [...(i ? [div().h(1).flex_none().mx(10).bg(t.border).opacity(0.5)] : []), this.row(p, t, cx, implied)]);
+    return nest(prs).flatMap(({ p, depth }, i) => [
+      ...(i && !depth ? [div().h(1).flex_none().mx(10).bg(t.border).opacity(0.5)] : []),
+      depth ? h_flex().flex_none().min_w(0).items_start()
+        .child(div().flex_none().ml(23 + 26 * (depth - 1)).w(13).h(24).border_l(2).border_b(2).border_color(`${t.ansi5}99`).rounded_bl(8))
+        .child(div().flex_1().min_w(0).child(this.row(p, t, cx, implied)))
+        : this.row(p, t, cx, implied),
+    ]);
   }
 
   // cwd only when the focused folder is a clone of this very repo: the dialog reads conflicts from it. seed: what the row already knows, so the dialog's header draws at once.
@@ -344,18 +377,23 @@ export default class Prs extends View {
       .child(div().size(28).when(this.icons, (e) => e.child(svg(icon("open")).size(28).text_color(t.dim))))
       .child(div().font_semibold().text_color(t.muted).child(this.syncing ? "Looking for a repository…" : "No repository yet"))
       .child(div().text_size(12).text_color(t.dim).text_center().child("Focus a terminal inside a GitHub repository and its pull requests show up here.")));
-    const entry = this.lists[this.repo]?.[this.state], prs = entry?.prs ?? [];
+    const error = this.errors[src(this.state)] ?? null;
+    const entry = this.lists[this.repo]?.[src(this.state)], prs = entry?.prs ?? [], stack = this.state === "stacked";
     const chip = this.state === "open" ? this.chipOf() : "all", c = counts(prs, this.scope, this.me);
-    // Drafts stay out of the default list; the Drafts chip (or a search) brings them in.
-    const noDrafts = chip === "all" && !this.query.trim();
-    const list = shown(prs, { scope: this.scope, chip, query: this.query, me: this.me }).filter((p) => !noDrafts || !p.draft);
+    // Drafts (and, with the toggle off, stacked PRs) stay out of the default list; a chip or a search brings them in.
+    const noDrafts = chip === "all" && !this.query.trim() && !stack, stacks = inStack(prs);
+    // The Stacked view keeps drafts: a stack's lower PRs are often drafts waiting on the one below.
+    const list = shown(prs, { scope: this.scope, chip, query: this.query, me: this.me }).filter((p) => (stack ? stacks(p) : !noDrafts || (!p.draft && (this.showStacked || !p.parent))));
     // Sections only while nothing narrows the list: a chip or a search already is the grouping.
     const sections = this.state === "open" && chip === "all" && !this.query.trim() && list.length ? grouped(list, this.scope) : null;
-    const empty = this.error ?? (!entry ? "Loading pull requests…" : this.query.trim() ? "No pull requests match" : "Nothing here");
-    const live = prs.filter((p) => !p.draft), mineCount = live.filter((p) => p.author === this.me).length, openCount = this.lists[this.repo]?.open?.prs.filter((p) => !p.draft).length;
+    const empty = error ?? (!entry ? "Loading pull requests…" : this.query.trim() ? "No pull requests match" : stack ? "No stacked pull requests" : "Nothing here");
+    // Tab counts are repo totals; the All/Mine pills split what the current view counts.
+    const open = this.lists[this.repo]?.open?.prs;
+    const tabCounts = open ? { open: open.filter((p) => !p.draft).length, stacked: open.filter(inStack(open)).length } : {};
+    const live = stack ? prs.filter(stacks) : prs.filter((p) => !p.draft), mineCount = live.filter((p) => p.author === this.me).length;
     const pickState = (k) => (_e, cx) => {
       this.state = k; keep("state", k);
-      if (!this.lists[this.repo]?.[k]) this.refresh(cx, k);
+      if (!this.lists[this.repo]?.[src(k)]) this.refresh(cx, k);
       cx.notify();
     };
     // Clicking the active chip clears it, so there's no "All" chip to carry.
@@ -364,7 +402,7 @@ export default class Prs extends View {
       .child(h_flex().h(42).flex_none().px(8).gap(8).items_center().border_b(1).border_color(t.border)
         .child(h_flex().h_full().flex_none().min_w(0).gap(2)
           .children(Object.entries(STATES).map(([k, s]) => this.tab(`state-${k}`, t, this.state === k, pickState(k),
-            s.label, k === "open" && openCount !== undefined ? div().text_size(11).font_normal().text_color(t.dim).child(String(openCount)) : null))))
+            s.label, tabCounts[k] !== undefined ? div().text_size(11).font_normal().text_color(t.dim).child(String(tabCounts[k])) : null))))
         .child(div().flex_1())
         .child(h_flex().id("prs-filter").w(150).min_w(70).h(28).px(8).gap(6).items_center().rounded(7).border_1().border_color(this.typing ? t.accent : t.border).cursor_text()
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
@@ -375,7 +413,7 @@ export default class Prs extends View {
           .tooltip(this.pinned ? `Unpin ${this.repo}` : `Pin ${this.repo}: keep showing it when the focus moves elsewhere`)
           .child(div().size(12).when(this.icons, (e) => e.child(svg(icon("pin")).size(12)))))
         .child(div().id("prs-refresh").size(28).flex_none().flex().items_center().justify_center().rounded(7).border_1().border_color(t.border).text_color(t.muted)
-          .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => this.refresh(cx))
+          .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { this.misses = {}; this.refresh(cx); })
           .tooltip(`${this.repo}${entry ? ` · updated ${age(new Date(entry.at).toISOString())} ago` : ""}`)
           .child(this.syncing
             ? svg("mods/workspace-chrome/spinner.svg").size(12).text_color(t.working).spin(900)
@@ -384,10 +422,11 @@ export default class Prs extends View {
         .child(h_flex().flex_none().p(2).gap(2).rounded(8).bg(t.raised)
           .children(Object.entries(SCOPES).map(([k, label]) => this.scopeTab(k, label, this.scope === k, entry ? (k === "mine" ? mineCount : live.length) : null, t,
             (_e, cx) => { this.scope = k; keep("scope", k); cx.notify(); }))))
-        .when(chips.length > 0, (e) => e.child(this.filterView(chip, c, chips, t))))
-      .when(Boolean(this.notice && this.state === "open" && !this.error), (e) => e.child(div().flex_none().px(14).py(4).text_size(11).text_color(t.ansi3).border_b(1).border_color(t.border).truncate()
+        .when(chips.length > 0, (e) => e.child(this.filterView(chip, c, chips, t)))
+        .when(this.state === "open", (e) => e.child(div().flex_1()).child(this.stackToggle(t))))
+      .when(Boolean(this.notice && src(this.state) === "open" && !error), (e) => e.child(div().flex_none().px(14).py(4).text_size(11).text_color(t.ansi3).border_b(1).border_color(t.border).truncate()
         .tooltip(this.notice).child("Couldn't read review commits: reviews on older commits may still count")))
-      .when(Boolean(this.error && entry), (e) => e.child(div().flex_none().px(14).py(6).text_size(11).text_color(t.ansi1).border_b(1).border_color(t.border).truncate().child(this.error)))
+      .when(Boolean(error && entry), (e) => e.child(div().flex_none().px(14).py(6).text_size(11).text_color(t.ansi1).border_b(1).border_color(t.border).truncate().child(error)))
       .child(v_flex().id("prs-list").flex_1().min_h(0).overflow_y_scrollbar().p(6).gap(2)
         .children(sections
           ? sections.flatMap((g, i) => {
@@ -396,6 +435,6 @@ export default class Prs extends View {
             return [this.section(key, SECTION_TONES[g.key], g.label, g.prs.length, closed, t, i === 0), ...(closed ? [] : this.rows(g.prs, t, cx, this.scope === "all" || g.key !== "attention"))];
           })
           : this.rows(list, t, cx, false))
-        .when(!list.length, (e) => e.child(div().px(16).py(28).text_size(12).text_center().text_color(this.error ? t.ansi1 : t.dim).child(empty))));
+        .when(!list.length, (e) => e.child(div().px(16).py(28).text_size(12).text_center().text_color(error ? t.ansi1 : t.dim).child(empty))));
   }
 }

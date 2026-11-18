@@ -77,7 +77,7 @@ test("mine shows only my PRs and its chips split by review outcome", () => {
 
 test("all has needs review, being reviewed (assigned) and asked-of-me chips", () => {
   const all = [pr(1, { assignees: [{ login: "bo" }], reviewRequests: [{ login: "me" }] }), pr(2), pr(3, { isDraft: true })];
-  assert.deepEqual(counts(all, "all", "me"), { all: 3, needs: 1, reviewing: 1, asked: 1, draft: 1 });
+  assert.deepEqual(counts(all, "all", "me"), { all: 3, needs: 1, reviewed: 0, reviewing: 1, asked: 1, draft: 1 });
   assert.deepEqual(shown(all, { scope: "all", chip: "asked", me: "me" }).map((p) => p.number), [1]);
 });
 

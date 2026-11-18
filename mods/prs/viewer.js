@@ -12,7 +12,7 @@ import { repoSettings, compare, conflictFiles } from "./mergeload.js";
 import { mergeView, mergeSkeleton } from "./mergebox.js";
 import { openUrl } from "./menu.js";
 import { tone, verdict, labelChip } from "./ui.js";
-import { header, bar } from "./header.js";
+import { header, bar, since } from "./header.js";
 import { sidebar } from "./sidebar.js";
 
 const DETAIL = "number,title,body,author,state,isDraft,labels,assignees,reviewRequests,latestReviews,reviewDecision,comments,commits,files,statusCheckRollup,headRefName,baseRefName,additions,deletions,changedFiles,createdAt,updatedAt,mergedAt,mergedBy,mergeable,mergeStateStatus,headRefOid,isCrossRepository,headRepositoryOwner,url,milestone,reactionGroups,closingIssuesReferences";
@@ -50,8 +50,9 @@ export class Viewer {
     this.load(cx);
     cx.timer.every(5000, (cx) => this.poll(cx));
     // The list behind stops refreshing while this is open; a beat that stops (crash) expires by itself.
+    // Every setShared redraws every mod, so the beat is slow (see dialogOpen in main.js).
     setShared("prs.dialog", Date.now());
-    cx.timer.every(3000, () => setShared("prs.dialog", Date.now()));
+    cx.timer.every(30000, () => setShared("prs.dialog", Date.now()));
     this.handle.focus();
   }
 
@@ -139,7 +140,9 @@ export class Viewer {
   poll(cx) {
     const pr = this.pr, id = this.id();
     if (!pr) return;
-    cx.notify();
+    // Redraw only for the "Updated … ago" label when its text changes, not on every tick.
+    const label = since(this.refreshedAt ?? Date.now());
+    if (label !== this.label) { this.label = label; cx.notify(); }
     if (this.loading || this.busy || Date.now() < this.nextAt) return;
     this.nextAt = Date.now() + nextPoll(pr, { actedAt: this.actedAt });
     cx.spawn(async (cx) => {
@@ -256,6 +259,7 @@ export class Viewer {
 
   // Shows the change at once; the reload after gh confirms it.
   toggleLabel(l, cx) {
+    if (this.busy) return;
     const has = this.pr.labels.some((x) => x.name === l.name);
     this.pr.labels = has ? this.pr.labels.filter((x) => x.name !== l.name) : [...this.pr.labels, l];
     this.run(labelArgs(l.name, has), cx);

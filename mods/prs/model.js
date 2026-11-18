@@ -102,7 +102,7 @@ export function normalize(p, state = "open") {
     assignees: (p.assignees ?? []).map((a) => a.login),
     requested: (p.reviewRequests ?? []).map((r) => r.login ?? r.name ?? r.slug).filter(Boolean),
     reviews: (p.latestReviews ?? []).map((r) => ({ login: r.author?.login, state: r.state, stale: movedSince(p, r.commit?.oid) })),
-    labels: p.labels ?? [], head: p.headRefName, headOid: p.headRefOid, base: p.baseRefName,
+    labels: p.labels ?? [], fork: Boolean(p.isCrossRepository), head: p.headRefName, headOid: p.headRefOid, base: p.baseRefName,
     adds: p.additions ?? 0, dels: p.deletions ?? 0, files: p.changedFiles ?? 0,
     updatedAt: p.updatedAt, ci: ciOf(p.statusCheckRollup),
     merge: mergeOf(p), blocked: p.mergeStateStatus === "BLOCKED", last: lastFromOthers(p),
@@ -168,4 +168,34 @@ export function grouped(prs, scope) {
   const by = new Map(GROUPS[scope].map(([key, label]) => [key, { key, label, prs: [] }]));
   for (const p of prs) by.get(bucket(p, scope)).prs.push(p);
   return [...by.values()].filter((g) => g.prs.length);
+}
+
+// Stacks: a PR whose base is another open PR's branch sits on it (parent). The trunk is the base most PRs target,
+// so a repo working off develop flags PRs into main, release/* or a feature branch as off trunk.
+// Ties go to long-lived branch names, then to a base that is itself some PR's head (develop in a develop → main release).
+// Never a parent: a fork's PR, one whose head is the trunk or a long-lived branch, or a head two open PRs share.
+// ponytail: trunk is a vote, not the repo's default branch; ask gh for defaultBranchRef if a repo ever lists mostly release PRs.
+const LONG_LIVED = /^(main|master|develop|development|dev|staging|production|release)$/;
+export function stacked(prs) {
+  const tally = new Map(), heads = new Set(prs.map((p) => p.head));
+  for (const p of prs) tally.set(p.base, (tally.get(p.base) ?? 0) + 1);
+  const rank = ([base, n]) => [n, LONG_LIVED.test(base) ? 1 : 0, heads.has(base) ? 1 : 0];
+  const trunk = [...tally].sort((a, b) => { const x = rank(a), y = rank(b); return y[0] - x[0] || y[1] - x[1] || y[2] - x[2]; })[0]?.[0] ?? null;
+  const byHead = new Map();
+  for (const p of prs) if (!p.fork && p.head !== trunk && !LONG_LIVED.test(p.head)) byHead.set(p.head, byHead.has(p.head) ? null : p);
+  return prs.map((p) => {
+    const parent = byHead.get(p.base);
+    const on = parent && parent.number !== p.number ? parent : null;
+    return { ...p, trunk, parent: on?.number ?? null, parentTitle: on?.title ?? null, offTrunk: Boolean(trunk) && p.base !== trunk };
+  });
+}
+
+// The list in its order, but with each PR's stacked children right under it: [{ p, depth }]. A parent outside the list leaves the child where it was.
+export function nest(prs) {
+  const nums = new Set(prs.map((p) => p.number)), kids = new Map(), out = [], seen = new Set();
+  for (const p of prs) if (nums.has(p.parent)) kids.set(p.parent, [...(kids.get(p.parent) ?? []), p]);
+  const walk = (p, depth) => { if (seen.has(p.number)) return; seen.add(p.number); out.push({ p, depth }); for (const k of kids.get(p.number) ?? []) walk(k, depth + 1); };
+  for (const p of prs) if (!nums.has(p.parent)) walk(p, 0);
+  for (const p of prs) walk(p, 0);
+  return out;
 }
