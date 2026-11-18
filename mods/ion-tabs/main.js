@@ -1,6 +1,6 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, ScrollHandle } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings, props } from "herdr";
+import { spaces, panes, focused, run, openOverlay, theme, window, shared, layout, settings, props, nextCommand } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -27,14 +27,29 @@ function label(tab, lead) {
   return (tab.name === prog || !tab.named) && telling ? live : base;
 }
 
+// Closing the last terminal of a space opens a fresh tab there first, so Herdr stays in the space
+// instead of jumping to another one. Bound as ion-tabs.close-pane / ion-tabs.close-tab.
+function closeHere(kind) {
+  const f = focused(), tab = f?.tab;
+  const space = tab && spaces().find((s) => s.tabs.some((t) => t.id === tab));
+  if (!space || (kind === "close-pane" && !f.pane)) return;
+  if (kind === "close-pane" && panes().filter((p) => p.tab === tab).length > 1) return run("pane.close", { pane: f.pane });
+  if (space.tabs.length === 1) run("tab.new", { space: space.id });
+  run("tab.close", { id: tab });
+}
+
 export default class Tabs extends View {
-  init() {
+  init(_props, cx) {
     this.pressed = null;
     this.scroll = ScrollHandle.new();
     this.panelsOnly = Boolean(props()?.panels);
     try { this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}"); } catch { this.panels = {}; }
     if (!this.panels || typeof this.panels !== "object" || Array.isArray(this.panels)) this.panels = {};
     this.swipe = { acc: 0, steps: 0, at: 0, last: 0 };
+    // Two copies show (tabs and panel buttons): only the tabs one acts, or a key would close twice.
+    if (!this.panelsOnly) cx.spawn(async () => {
+      for (;;) { const c = await nextCommand(); if (c === "close-pane" || c === "close-tab") closeHere(c); }
+    });
   }
 
   // One tab per wheel notch; a touchpad swipe switches one tab per ~60 px,

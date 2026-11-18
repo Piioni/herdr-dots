@@ -95,6 +95,13 @@
     "ctrl-right": "send:\u001bf",
     "ctrl-shift-c": "terminal.copy",
     "ctrl-shift-v": "terminal.paste",
-    "ctrl-v": "terminal.paste_image"
+    "ctrl-v": "terminal.paste_image",
+    "ctrl-shift-f": "terminal.search"
+  },
+  "layout:piioni": {
+    "ctrl-shift-w": "ion-tabs.close-tab",
+    "alt-w": "ion-tabs.close-tab",
+    "ctrl-shift-x": "ion-tabs.close-pane",
+    "alt-x": "ion-tabs.close-pane"
   }
 }
