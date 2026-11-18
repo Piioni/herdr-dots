@@ -1,7 +1,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, focused, exec, run, layout, theme, notify, props, shared, setShared, openOverlay } from "herdr";
-import { normalize, reviewOf, counts, shown, grouped, stacked, nest, SCOPES, CHIPS } from "./model.js";
+import { normalize, counts, shown, grouped, stacked, nest, lead, nameList, IMPLIED, SCOPES, CHIPS } from "./model.js";
 import { avatar } from "./people.js";
 import { shown as handle } from "./timeline.js";
 import { icons, icon } from "./icons.js";
@@ -11,7 +11,7 @@ import { Menu, openMenu } from "./menu.js";
 const REFRESH = 60000;
 const BASIC = "number,title,url,author,assignees,isDraft,labels,updatedAt,isCrossRepository,headRefName,headRefOid,baseRefName,additions,deletions,changedFiles";
 // What the open list needs to judge a PR; merged and closed ones are only listed, so they skip the heavy review, comment and check data.
-const FIELDS = { open: `${BASIC},reviewRequests,latestReviews,comments,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup`, merged: BASIC, closed: BASIC };
+const FIELDS = { open: `${BASIC},reviewRequests,latestReviews,comments,mergeable,mergeStateStatus,reviewDecision`, merged: BASIC, closed: BASIC };
 // A change of focus or panel re-uses a list this young instead of asking GitHub again.
 const FRESH = 15000;
 // How long a folder found outside any repo is not asked about again.
@@ -23,9 +23,18 @@ const STATES = { open: { label: "Open", limit: 100 }, stacked: { label: "Stacked
 const src = (state) => (state === "stacked" ? "open" : state);
 // In a stack: on another PR, carrying one, or aimed at a branch other than the trunk.
 const inStack = (prs) => { const parents = new Set(prs.map((p) => p.parent)); return (p) => p.parent || parents.has(p.number) || p.offTrunk; };
-const REVIEW = { approved: ["Approved", "ansi2", "check"], changes: ["Changes requested", "ansi1", "x"], needs: ["Needs review", "ansi3", "eye"], draft: ["Draft", "muted", "draft"] };
-const MERGE = { conflicts: ["Conflicts", "ansi1", "alert"], behind: ["Behind", "ansi3", "alert"], clean: ["Clean", "ansi2", "check"], unknown: ["Checking", "muted", "dot"] };
-const CI = { passing: ["CI", "ansi2", "check"], failing: ["CI failing", "ansi1", "x"], pending: ["CI running", "ansi3", "dot"] };
+// Each row signal: words, tone, glyph and tooltip (see signals() in model.js; "since" is worded per PR).
+const SIGNAL = {
+  conflicts: ["Conflicts", "ansi1", "alert", "Conflicts with the base branch"],
+  changes: ["Changes requested", "ansi1", "x"],
+  blocked: ["Blocked", "ansi3", "alert", "Approved, but GitHub still blocks the merge: required checks or reviews are missing"],
+  behind: ["Behind", "ansi3", "behind", "Behind its base branch"],
+  approved: ["Approved", "ansi2", "check"],
+  needs: ["Needs review", "ansi3", "eye"],
+  draft: ["Draft", "muted", "draft"],
+  "merge-clean": ["Merges cleanly", "dim", "merged"],
+  "merge-unknown": ["Checking mergeability", "dim", "dot"],
+};
 const CHIP_TONES = { conflicts: "ansi1", changes: "ansi1", approved: "ansi2", needs: "ansi3", reviewing: "ansi4", reviewed: "ansi6", asked: "accent", draft: "muted" };
 const SECTION_TONES = { attention: "ansi1", ready: "ansi2", waiting: "ansi3", draft: "muted", needs: "ansi3", reviewing: "ansi4", reviewed: "ansi6", changes: "ansi1", approved: "ansi2" };
 const LAST = { changes: ["requested changes", "ansi1"], approved: ["approved", "ansi2"], reviewed: ["reviewed", "ansi4"], comment: ["commented", "ansi4"] };
@@ -274,35 +283,31 @@ export default class Prs extends View {
       .when(Boolean(glyph) && this.icons, (e) => e.child(svg(icon(glyph)).size(11).text_color(color))).child(label);
   }
 
-  // implied: the section the row sits in already says its review state, so the capsule is left out.
-  row(p, t, cx, implied = false) {
-    const open = p.state === "open", review = reviewOf(p), [label, tone, glyph] = REVIEW[review];
-    const mine = this.scope === "mine";
-    const [mergeLabel, mergeTone, mergeGlyph] = MERGE[p.merge];
-    const tags = [];
+  // implied: the review state the row's section already says (IMPLIED), left out of the row.
+  // nested: the row hangs under its parent, so the elbow already says what the stack chip would.
+  // Line 2: the most urgent signal in words, the others as icons, the stack chip; people and size on the right.
+  row(p, t, cx, implied = null, nested = false) {
+    const open = p.state === "open";
     const cut = (s) => (s.length > 26 ? `${s.slice(0, 25)}…` : s);
-    if (p.parent) tags.push(this.tag(`sk-${p.number}`, t, t.ansi5, `on #${p.parent}`, "stack", `Stacked on #${p.parent} ${p.parentTitle}\n${p.head} → ${p.base}`));
-    else if (p.offTrunk) tags.push(this.tag(`sk-${p.number}`, t, t.ansi5, `→ ${cut(p.base)}`, "branch", `Targets ${p.base}, not ${p.trunk}`));
-    if (open) {
-      if (!implied) tags.push(this.tag(`rv-${p.number}`, t, t[tone], label, glyph));
-      if (!p.draft) tags.push(this.tag(`mg-${p.number}`, t, t[mergeTone], mergeLabel, mergeGlyph, `${p.head} → ${p.base}`, ["clean", "unknown"].includes(p.merge)));
-      if (p.merge === "clean" && p.blocked && review === "approved") tags.push(this.tag(`bl-${p.number}`, t, t.ansi3, "Blocked", "alert", "Approved, but GitHub still blocks the merge: required checks or reviews are missing"));
-      if (p.since) {
-        const parts = [p.since.commits && plural(p.since.commits, "new commit"), p.since.replies && plural(p.since.replies, "author reply")].filter(Boolean);
-        tags.push(this.tag(`sc-${p.number}`, t, t.ansi4, parts.join(" · "), p.since.commits ? "commit" : "comment", `Since ${handle(p.since.login)}'s last review: ${parts.join(" and ")}`));
-      }
-      if (p.ci) { const [ciLabel, ciTone, ciGlyph] = CI[p.ci]; tags.push(this.tag(`ci-${p.number}`, t, t[ciTone], ciLabel, ciGlyph, `Checks ${p.ci}`, p.ci !== "failing")); }
-    } else tags.push(this.tag(`st-${p.number}`, t, p.state === "merged" ? t.ansi5 : t.ansi1, p.state === "merged" ? "Merged" : "Closed", p.state === "merged" ? "merged" : "closed"));
-    const reviewers = open && p.assignees.length
-      ? h_flex().gap(5).flex_none().items_center().h(20).pl(7).pr(3).rounded(10).bg(`${t.ansi4}24`).text_size(11).font_medium().text_color(t.ansi4)
-        .tooltip(`Being reviewed by ${p.assignees.join(", ")}`)
-        .when(this.icons, (e) => e.child(svg(icon("eye")).size(11))).child("Reviewing")
-        .child(h_flex().gap(2).items_center().children(p.assignees.slice(0, 3).map((a) => avatar(a, null, 14, t, cx))))
-      : null;
+    const { primary, rest } = lead(p, implied);
+    const sig = (k) => {
+      if (k !== "since") return SIGNAL[k];
+      const parts = [p.since.commits && plural(p.since.commits, "new commit"), p.since.replies && (p.since.replies === 1 ? "1 reply" : `${p.since.replies} replies`)].filter(Boolean);
+      return [parts.join(" · "), "ansi4", p.since.commits ? "commit" : "comment", `Since ${handle(p.since.login)}'s last review: ${parts.join(" and ")}`];
+    };
+    const capsule = [];
+    // Only Blocked needs its tooltip: the other capsules say it all.
+    if (primary) { const [label, tone, glyph, tip] = sig(primary); capsule.push(this.tag(`sg-${p.number}`, t, t[tone], label, glyph, primary === "blocked" ? tip : null)); }
+    if (!open) capsule.push(this.tag(`st-${p.number}`, t, p.state === "merged" ? t.ansi5 : t.ansi1, p.state === "merged" ? "Merged" : "Closed", p.state === "merged" ? "merged" : "closed"));
+    const glyphs = rest.map((k) => {
+      const [label, tone, glyph, tip] = sig(k);
+      return div().id(`si-${p.number}-${k}`).flex_none().tooltip(tip ?? label).when(this.icons, (e) => e.child(svg(icon(glyph)).size(12).text_color(t[tone])));
+    });
+    const stack = p.parent && !nested ? this.tag(`sk-${p.number}`, t, t.ansi5, `on #${p.parent}`, "stack", `Stacked on #${p.parent} ${p.parentTitle}\n${p.head} → ${p.base}`)
+      : !p.parent && p.offTrunk ? this.tag(`sk-${p.number}`, t, t.ansi5, `→ ${cut(p.base)}`, "branch", `Targets ${p.base}, not ${p.trunk}`) : null;
     const last = open && p.last ? p.last : null, [verb, lastTone] = LAST[last?.kind] ?? [];
     const quiet = open && !p.draft ? t.foreground : t.muted;
     return v_flex().id(`pr-${p.number}`).flex_none().min_w(0).px(10).py(9).gap(7).rounded(8).cursor_pointer().hover((s) => s.bg(t.hover))
-      .tooltip(`${p.head} → ${p.base} · Right click: copy branch name`)
       .on_click(() => this.open(p))
       .on_mouse_down("right", (_e, cx) => {
         cx.stop_propagation(); cx.write_to_clipboard(p.head);
@@ -311,30 +316,47 @@ export default class Prs extends View {
       .child(h_flex().gap(10).items_start().min_w(0)
         .child(div().pt(1).child(avatar(p.author, null, 28, t, cx)))
         .child(v_flex().flex_1().min_w(0).gap(5)
-          .child(h_flex().gap(8).items_center().min_w(0)
+          .child(h_flex().gap(6).items_center().min_w(0)
             .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().text_color(quiet).child(p.title))
-            .child(div().flex_none().text_size(11).text_color(t.dim).child(`#${p.number}`)))
-          .child(h_flex().gap_x(10).gap_y(5).items_center().flex_wrap().min_w(0).text_size(11)
-            .child(h_flex().gap(5).flex_none().items_center().tooltip(`Updated ${age(p.updatedAt)} ago`)
-              .when(!mine, (e) => e.child(div().text_color(t.muted).child(handle(p.author))).child(div().text_color(t.dim).child("·")))
-              .child(div().text_color(t.dim).child(age(p.updatedAt))))
-            .children(tags)
-            .when(open && p.verdicts.length > 0, (e) => e.child(h_flex().gap(6).flex_none().items_center().children(p.verdicts.map((v) => {
-              const [glyph, tone, said] = VERDICT[v.kind];
-              return h_flex().id(`vd-${p.number}-${v.login}`).gap(2).items_center().opacity(v.stale ? 0.5 : 1)
-                .tooltip(`${handle(v.login)}: ${said}${v.stale ? " on an older commit" : ""}`)
-                .child(avatar(v.login, null, 14, t, cx))
-                .when(this.icons, (x) => x.child(svg(icon(glyph)).size(10).text_color(t[tone])));
-            }))))
-            .when(reviewers !== null, (e) => e.child(reviewers))
+            .child(div().flex_none().text_size(11).text_color(t.dim).child(`#${p.number} · ${age(p.updatedAt)}`)))
+          .child(h_flex().gap_x(8).gap_y(5).items_center().flex_wrap().min_w(0).text_size(11)
+            // Who it is (in All) or which branch (in Mine): many avatars are GitHub's default picture.
+            .child(div().flex_none().max_w(200).truncate().text_color(t.muted).child(this.scope === "mine" ? p.head : handle(p.author)))
+            .children(capsule)
+            .when(glyphs.length > 0, (e) => e.child(h_flex().gap(6).flex_none().items_center().children(glyphs)))
+            .when(Boolean(stack), (e) => e.child(stack))
             .child(div().flex_1())
-            .child(h_flex().gap(4).flex_none().child(div().text_color(t.ansi2).child(`+${p.adds}`)).child(div().text_color(t.ansi1).child(`−${p.dels}`))))
+            .when(open, (e) => e.child(this.people(p, t, cx)))
+            .child(h_flex().gap(4).flex_none().ml(4).child(div().text_color(t.ansi2).child(`+${p.adds}`)).child(div().text_color(t.ansi1).child(`−${p.dels}`))))
           .when(Boolean(last), (e) => e.child(h_flex().gap(6).items_center().min_w(0).mt(1).px(8).py(4).rounded(6).bg(t.raised).text_size(11)
-            .when(p.activity.length > 1, (x) => x.tooltip(p.activity.map((a) => `${handle(a.login)} ${LAST[a.kind][0]} · ${age(a.at)} ago${a.text ? `\n    ${a.text}` : ""}`).join("\n")))
             .child(avatar(last.login, null, 14, t, cx))
             .child(div().flex_none().font_medium().text_color(t[lastTone]).child(`${handle(last.login)} ${verb}`))
             .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(last.text))
             .child(div().flex_none().text_color(t.dim).child(age(last.at)))))));
+  }
+
+  // Who is reviewing now (blue), who was asked and hasn't answered (grey), then a segmented bar of the verdicts given:
+  // one segment per reviewer who answered, colored by verdict, grey when it was left on an older commit (it no longer counts).
+  people(p, t, cx) {
+    const ORDER = { approved: 0, reviewed: 1, changes: 2 };
+    const answered = p.verdicts.filter((v) => v.kind !== "pending").sort((a, b) => ORDER[a.kind] - ORDER[b.kind]);
+    const asked = p.verdicts.filter((v) => v.kind === "pending" && !p.assignees.includes(v.login)).map((v) => v.login);
+    const approved = answered.filter((v) => v.kind === "approved" && !v.stale).length;
+    // Avatars, then a word that never shrinks and names that cut first.
+    const capsule = (id, logins, word, color, bg) => h_flex().id(id).h(20).pl(3).pr(7).gap(5).flex_none().items_center().rounded(10).bg(bg).text_color(color).font_medium()
+      .child(h_flex().gap(2).flex_none().items_center().children(logins.slice(0, 3).map((a) => avatar(a, null, 14, t, cx))))
+      .child(div().flex_none().child(`${word} ·`))
+      .child(div().min_w(0).max_w(110).truncate().child(nameList(logins.map(handle))));
+    const bar = answered.length
+      ? h_flex().id(`rb-${p.number}`).gap(6).flex_none().items_center()
+        .tooltip(answered.map((v) => `${handle(v.login)}: ${VERDICT[v.kind][2]}${v.stale ? " on an older commit" : ""}`).join("\n"))
+        .child(h_flex().gap(2).items_center().children(answered.map((v) => div().w(10).h(5).rounded(2).bg(v.stale ? t.border : t[VERDICT[v.kind][1]]))))
+        .child(div().text_color(t.dim).child(`${approved}/${answered.length}`))
+      : null;
+    return h_flex().flex_none().gap(8).items_center()
+      .when(p.assignees.length > 0, (e) => e.child(capsule(`rw-${p.number}`, p.assignees, "Reviewing", t.ansi4, `${t.ansi4}24`)))
+      .when(asked.length > 0, (e) => e.child(capsule(`ak-${p.number}`, asked, "Asked", t.muted, t.raised)))
+      .when(Boolean(bar), (e) => e.child(bar));
   }
 
   // A section header, folded or unfolded by a click, like the groups of the Issues panel.
@@ -355,7 +377,7 @@ export default class Prs extends View {
       ...(i && !depth ? [div().h(1).flex_none().mx(10).bg(t.border).opacity(0.5)] : []),
       depth ? h_flex().flex_none().min_w(0).items_start()
         .child(div().flex_none().ml(23 + 26 * (depth - 1)).w(13).h(24).border_l(2).border_b(2).border_color(`${t.ansi5}99`).rounded_bl(8))
-        .child(div().flex_1().min_w(0).child(this.row(p, t, cx, implied)))
+        .child(div().flex_1().min_w(0).child(this.row(p, t, cx, implied, true)))
         : this.row(p, t, cx, implied),
     ]);
   }
@@ -432,9 +454,9 @@ export default class Prs extends View {
           ? sections.flatMap((g, i) => {
             const key = `${this.scope}|${g.key}`, closed = this.fold.has(key);
             // The section already says "needs review", "approved" or "draft"; "Needs your attention" mixes states, so its rows keep theirs.
-            return [this.section(key, SECTION_TONES[g.key], g.label, g.prs.length, closed, t, i === 0), ...(closed ? [] : this.rows(g.prs, t, cx, this.scope === "all" || g.key !== "attention"))];
+            return [this.section(key, SECTION_TONES[g.key], g.label, g.prs.length, closed, t, i === 0), ...(closed ? [] : this.rows(g.prs, t, cx, IMPLIED[this.scope][g.key] ?? null))];
           })
-          : this.rows(list, t, cx, false))
+          : this.rows(list, t, cx, null))
         .when(!list.length, (e) => e.child(div().px(16).py(28).text_size(12).text_center().text_color(error ? t.ansi1 : t.dim).child(empty))));
   }
 }

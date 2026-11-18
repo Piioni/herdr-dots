@@ -23,15 +23,6 @@ const movedSince = (p, oid) => {
   return seen < 0 || all.slice(seen + 1).some((c) => !(p.mergeOids ?? []).includes(c));
 };
 
-// GitHub mixes check runs (status/conclusion) and commit statuses (state) in one list.
-export function ciOf(rollup = []) {
-  if (!rollup.length) return null;
-  const failed = (c) => ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE", "ACTION_REQUIRED"].includes(c.conclusion ?? c.state);
-  const pending = (c) => (c.status && c.status !== "COMPLETED") || ["PENDING", "EXPECTED"].includes(c.state);
-  if (rollup.some(failed)) return "failing";
-  return rollup.some(pending) ? "pending" : "passing";
-}
-
 // Bots and bot-looking comments (Linear link-backs, CI reports) are not "someone else's feedback".
 const BOT = /\[bot\]$|^app\/|^(linear(-code)?|github-actions|copilot|dependabot|vercel|codecov|sonarcloud|sonarqubecloud)$/i;
 const KINDS = { CHANGES_REQUESTED: "changes", APPROVED: "approved", COMMENTED: "reviewed" };
@@ -104,7 +95,7 @@ export function normalize(p, state = "open") {
     reviews: (p.latestReviews ?? []).map((r) => ({ login: r.author?.login, state: r.state, stale: movedSince(p, r.commit?.oid) })),
     labels: p.labels ?? [], fork: Boolean(p.isCrossRepository), head: p.headRefName, headOid: p.headRefOid, base: p.baseRefName,
     adds: p.additions ?? 0, dels: p.deletions ?? 0, files: p.changedFiles ?? 0,
-    updatedAt: p.updatedAt, ci: ciOf(p.statusCheckRollup),
+    updatedAt: p.updatedAt,
     merge: mergeOf(p), blocked: p.mergeStateStatus === "BLOCKED", last: lastFromOthers(p),
     verdicts: verdictsOf(p), since: sinceReview(p), activity: activityOf(p),
   };
@@ -159,7 +150,7 @@ const GROUPS = {
 function bucket(p, scope) {
   const review = reviewOf(p);
   if (review === "draft") return "draft";
-  if (scope === "mine") return review === "changes" || p.merge === "conflicts" || p.ci === "failing" ? "attention" : review === "approved" && p.merge === "clean" && !p.blocked && p.ci !== "pending" ? "ready" : "waiting";
+  if (scope === "mine") return review === "changes" || p.merge === "conflicts" ? "attention" : review === "approved" && p.merge === "clean" && !p.blocked ? "ready" : "waiting";
   return review === "changes" || review === "approved" ? review : p.assignees.length ? "reviewing" : isReviewed(p) ? "reviewed" : "needs";
 }
 
@@ -199,3 +190,35 @@ export function nest(prs) {
   for (const p of prs) walk(p, 0);
   return out;
 }
+
+// What a row says about an open PR, most urgent first. The first loud one gets words; the rest are icons.
+// Quiet ones (merging cleanly, still being checked) only ever show as icons: they are the expected case.
+export const QUIET = new Set(["merge-clean", "merge-unknown"]);
+export function signals(p) {
+  if (p.state !== "open") return [];
+  const review = reviewOf(p), out = [];
+  if (!p.draft && p.merge === "conflicts") out.push("conflicts");
+  if (review === "changes") out.push("changes");
+  if (p.merge === "clean" && p.blocked && review === "approved") out.push("blocked");
+  if (!p.draft && p.merge === "behind") out.push("behind");
+  if (p.since) out.push("since");
+  if (review !== "changes") out.push(review);
+  if (!p.draft && (p.merge === "clean" || p.merge === "unknown")) out.push(`merge-${p.merge}`);
+  return out;
+}
+
+// The review state each section already states in its title, so its rows leave it out. "Waiting for review" (mine) also
+// holds approved PRs that are behind or blocked, and "Needs your attention" mixes states: only what the title says is implied.
+export const IMPLIED = {
+  mine: { waiting: "needs", ready: "approved", draft: "draft" },
+  all: { needs: "needs", reviewing: "needs", reviewed: "needs", changes: "changes", approved: "approved", draft: "draft" },
+};
+
+// The row's capsule (the first loud signal not implied by its section) and the icons after it.
+export function lead(p, implied = null) {
+  const keys = signals(p).filter((k) => k !== implied), primary = keys.find((k) => !QUIET.has(k)) ?? null;
+  return { primary, rest: keys.filter((k) => k !== primary) };
+}
+
+// "ana", "ana, bo", "ana, bo +3": names that fit a capsule.
+export const nameList = (names, max = 2) => (names.length > max ? `${names.slice(0, max).join(", ")} +${names.length - max}` : names.join(", "));

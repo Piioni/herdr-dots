@@ -39,7 +39,11 @@ export function icons() {
   written ??= (async () => {
     const dir = `${appHome()}/data/prs/icons`;
     await fs.mkdir(dir, { recursive: true });
-    for (const [name, body] of Object.entries(ICONS)) await fs.writeFile(`${dir}/${name}.svg`, body);
+    // Rewriting an unchanged icon on every hot reload can leave the app holding a half-written file: write only what changed.
+    for (const [name, body] of Object.entries(ICONS)) {
+      const path = `${dir}/${name}.svg`;
+      if (await fs.readFile(path, "utf8").catch(() => null) !== body) await fs.writeFile(path, body);
+    }
   })();
   return written;
 }

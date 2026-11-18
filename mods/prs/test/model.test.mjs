@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalize, reviewOf, ciOf, counts, shown, grouped, lastFromOthers, mergeOf, verdictsOf, sinceReview, activityOf } from "../model.js";
+import { normalize, reviewOf, counts, shown, grouped, lastFromOthers, mergeOf, verdictsOf, sinceReview, activityOf } from "../model.js";
 
 const raw = (number, over = {}) => ({
   number, title: `PR ${number}`, url: `https://github.com/a/b/pull/${number}`, author: { login: "ana" }, assignees: [], reviewRequests: [],
@@ -61,14 +61,6 @@ test("activity: the last events from anyone, newest first, bots out", () => {
   assert.equal(activityOf(p, 1).length, 1);
 });
 
-test("ci mixes check runs and commit statuses", () => {
-  assert.equal(ciOf([]), null);
-  assert.equal(ciOf([{ status: "COMPLETED", conclusion: "SUCCESS" }, { state: "SUCCESS" }]), "passing");
-  assert.equal(ciOf([{ status: "IN_PROGRESS" }, { status: "COMPLETED", conclusion: "SUCCESS" }]), "pending");
-  assert.equal(ciOf([{ status: "IN_PROGRESS" }, { status: "COMPLETED", conclusion: "FAILURE" }]), "failing");
-  assert.equal(ciOf([{ state: "PENDING" }]), "pending");
-});
-
 test("mine shows only my PRs and its chips split by review outcome", () => {
   const all = [pr(1, { author: { login: "me" }, reviewDecision: "APPROVED" }), pr(2, { author: { login: "me" }, reviewDecision: "CHANGES_REQUESTED" }), pr(3)];
   assert.deepEqual(counts(all, "mine", "me"), { all: 2, conflicts: 0, changes: 1, approved: 1, needs: 0, draft: 0 });
@@ -122,7 +114,7 @@ test("a required-review repo needs its decision: one approval of two is not appr
   const one = { latestReviews: [{ author: { login: "x" }, state: "APPROVED" }] };
   assert.equal(reviewOf(pr(1, { ...one, reviewDecision: "REVIEW_REQUIRED" })), "needs");
   assert.equal(reviewOf(pr(1, one)), "approved");
-  const mine = [pr(1, { reviewDecision: "APPROVED", mergeable: "MERGEABLE", mergeStateStatus: "CLEAN" }), pr(2, { reviewDecision: "APPROVED", mergeable: "MERGEABLE", mergeStateStatus: "BLOCKED" }), pr(3, { statusCheckRollup: [{ status: "COMPLETED", conclusion: "FAILURE" }] })];
+  const mine = [pr(1, { reviewDecision: "APPROVED", mergeable: "MERGEABLE", mergeStateStatus: "CLEAN" }), pr(2, { reviewDecision: "APPROVED", mergeable: "MERGEABLE", mergeStateStatus: "BLOCKED" }), pr(3, { mergeable: "CONFLICTING" })];
   assert.deepEqual(grouped(mine, "mine").map((g) => [g.key, g.prs.map((p) => p.number)]), [["attention", [3]], ["ready", [1]], ["waiting", [2]]]);
 });
 
