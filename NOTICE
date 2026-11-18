@@ -13,6 +13,9 @@ Parts of it are derived from other Apache-2.0 work:
 - mods/ion-files, mods/ion-changes and mods/ion-tabs derive
   from the agents, files, changes and tabs mods that ship with Herdr
   (Apache-2.0). See each mod's README for what changed.
+- mods/shortcuts comes from tahadx/herdr-setup
+  (https://github.com/tahadx/herdr-setup, MIT, see mods/shortcuts/LICENSE).
+  Changes: its own panels' rows replaced with this setup's commands.
 - mods/better-sidebar derives from Better Sidebar in munza/herdr-mods
   (https://github.com/munza/herdr-mods, Apache-2.0). Changes: Relevo account
   dots, handoff, background-work capsule and launcher, and a polished header.

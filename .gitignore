@@ -28,6 +28,7 @@
 !/mods/ion-files/
 !/mods/ion-tabs/
 !/mods/tasks/
+!/mods/shortcuts/
 
 # Written by gpui-shell into every mod folder.
 gpui-kit.d.ts
