@@ -22,7 +22,6 @@ import { loadSettings, duration } from "../settings.js";
 import { findNode } from "./find-node.js";
 import { TEXT, Icon, IconButton, Badge, Rail } from "./ui.js";
 
-const USUAL_BRANCHES = new Set(["main", "master"]);
 const rowHeight = ({ tree }) => (tree ? 28 : 30);
 
 // Watches and terminal events handle most changes. Poll visible repositories
@@ -473,21 +472,6 @@ export class Spaces {
 
   // ── Branch and PR descriptions ───────────────────────────────────────────
 
-  // The right end of a name row: the branch unless it's the usual one or repeats the
-  // name, and on the selected space how far it is from its remote.
-  // The branch, quietly beside the name. main, master and the space's own name go without saying.
-  branchName(g, name, t) {
-    const branch = g?.branch === "(detached)" ? "detached" : (g?.branch ?? "detached");
-    const shown = g && !USUAL_BRANCHES.has(branch) && branch !== name;
-    return div()
-      .flex_1()
-      .min_w(0)
-      .truncate()
-      .text_size(TEXT.caption)
-      .text_color(t.dim)
-      .when(shown, (el) => el.tooltip(branch).child(branch));
-  }
-
   // At the right: the checkout's pull request, and ahead/behind on the selected space.
   gitTail(g, active, t, w) {
     const pr = w ? this.prBadge(w, t) : null;
@@ -686,7 +670,7 @@ export class Spaces {
       .child(
         div().min_w(0).max_w(150).truncate().tooltip(w.name).text_color(t.foreground).child(w.name),
       )
-      .child(this.branchName(g, w.name, t))
+      .child(div().flex_1())
       .child(this.gitTail(g, w.active, t, w))
       .when(!w.machine && this.hoveredSpace === w.id, (el) => el.child(this.launchButton(w, t)));
   }
@@ -712,12 +696,13 @@ export class Spaces {
       .size(18)
       .flex_none()
       .rounded(5)
-      .bg(fill)
+      // Tinted, not solid: the letter carries the colour, as the PR panel's capsules do.
+      .bg(/^#[0-9a-f]{6}$/i.test(fill ?? "") ? fill + "26" : t.raised)
       .items_center()
       .justify_center()
       .text_size(TEXT.avatar)
       .font_bold()
-      .text_color("#ffffff")
+      .text_color(fill ?? t.muted)
       .child([...w.name][0]?.toUpperCase() ?? "?");
   }
 

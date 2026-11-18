@@ -21,6 +21,9 @@ import {
 import { findNode } from "./find-node.js";
 import { TEXT, Icon, IconButton, GroupHeader, Menu, MenuLabel, MenuOption } from "./ui.js";
 
+// Idle is the normal state: a row says nothing for it, but keeps the status column's width so names line up.
+const IDLE_SLOT = () => div().w(13).flex_none();
+
 // The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
 const narrow = () => (findNode(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
 
@@ -306,8 +309,6 @@ export class Agents {
             .h(17)
             .mr(4)
             .flex_none()
-            .when(Boolean(l), (el) => el.border_l(1.5).border_color(t.input))
-            .when(l === "└" || l === "├", (el) => el.border_b(1.5).rounded_bl(6)),
         ),
       )
       .when(Boolean(pic), (el) => el.child(div().mr(8).child(pic)))
@@ -318,7 +319,7 @@ export class Agents {
           .text_color(on ? t.foreground : t.muted)
           .child(k.name || k.template || k.program?.name || k.address),
       )
-      .child(this.status(t, { status: st }, compact));
+      .child(st === "idle" ? IDLE_SLOT() : this.status(t, { status: st }, compact));
   }
 
   // compact: a ! for blocked where a header already says "Needs you".
@@ -579,13 +580,17 @@ export class Agents {
   }
 
   agentRow(a, subs, view, t) {
-    const pic = icon(a.program, 16, t.foreground);
+    // An idle agent's icon fades: colour means something is happening (or it's the one you're on).
+    const raw = icon(a.program, 16, t.foreground);
+    const pic = raw && a.status === "idle" && !a.focused ? div().flex_none().opacity(0.4).child(raw) : raw;
     const hovered = this.hovered === a.address;
     const when = this.since(a);
     // An agent on another machine (`vps/t7`) says which.
     const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
     const labels = view.all.find((/** @type {any} */ terminal) => terminal.address === a.address)?.labels ?? {};
     const account = /** @type {any} */ (shared("relevo.setup"))?.accounts?.[labels["agent.account"]];
+    // Sipos is the usual account: its dot says nothing. Any other account shows; Move still shows on hover.
+    const unusual = account && !/^sipos$/i.test(account.label ?? "");
     const bg = labels["agent.bg"];
     return h_flex()
       .id(`ag-${a.address}`)
@@ -609,12 +614,12 @@ export class Agents {
       .when(Boolean(machine), (el) =>
         el.child(div().text_size(TEXT.badge).text_color(t.dim).child(machine)),
       )
-      .when(Boolean(bg), (el) => el.child(h_flex().id(`bg-${a.address}`).flex_none().h(16).px(6).gap(3).items_center().rounded(8)
-        .bg(/** @type {`#${string}`} */ (t.working + "26")).text_color(t.working).text_size(10.5).font_semibold()
+      // Background work: a quiet clock and count. It only pulses on an idle agent, where it is the news.
+      .when(Boolean(bg), (el) => el.child(h_flex().id(`bg-${a.address}`).flex_none().gap(3).items_center().text_color(t.muted).text_size(10.5)
         .tooltip(`Running in the background: ${bg.slice([...bg][0].length).trim()}. You'll be told when it finishes.`)
-        .child(Icon("clock", 10).loop("opacity", { from: 0.45, to: 1, period: 1400 }))
+        .child(Icon("clock", 10).when(a.status === "idle", (c) => c.loop("opacity", { from: 0.45, to: 1, period: 1400 })))
         .when(Boolean(/\d+/.exec(bg)), (tag) => tag.child(/\d+/.exec(bg)[0]))))
-      .when(Boolean(account), (el) => el.child(hovered && !machine
+      .when(Boolean(account) && (unusual || (hovered && !machine)), (el) => el.child(hovered && !machine
         ? div().id(`move-${a.address}`).h(18).px(8).rounded(5).bg(/** @type {`#${string}`} */ (t.accent + "26")).text_color(t.accent)
           .text_size(10.5).font_semibold().flex().items_center().flex_none().cursor_pointer()
           .tooltip(`${account.label} account · Continue with another account`)
@@ -622,7 +627,8 @@ export class Agents {
         : div().id(`acct-${a.address}`).size(6).flex_none().rounded(3).bg(account.bg).tooltip(`${account.label} account`)))
       .when(subs.length > 0, (el) => el.child(this.foldButton(a, subs, t)))
       .when(hovered, (el) => el.child(this.pinButton(a, t)))
-      .when(!hovered && Boolean(when), (el) =>
+      // How long it has been waiting: only when it waits on the person.
+      .when(!hovered && Boolean(when) && (a.status === "blocked" || a.status === "done"), (el) =>
         el.child(
           div()
             .flex_none()
@@ -631,7 +637,7 @@ export class Agents {
             .child(duration(view.now - when)),
         ),
       )
-      .child(this.status(t, a, view.byPriority && !a.pinned));
+      .child(a.status === "idle" ? IDLE_SLOT() : this.status(t, a, view.byPriority && !a.pinned));
   }
 
   // A tab with no agent, under its space in the lists view: its program and its name.
