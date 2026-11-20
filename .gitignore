@@ -29,10 +29,15 @@
 !/mods/ion-tabs/
 !/mods/tasks/
 !/mods/shortcuts/
+!/mods/insights/
+!/mods/markdown-panel/
 
 # Written by gpui-shell into every mod folder.
 gpui-kit.d.ts
 jsconfig.json
+
+# The insights mod records this machine's node path here.
+mods/insights/runtime.json
 
 # Python bytecode from the relevo hook and its test.
 __pycache__/
