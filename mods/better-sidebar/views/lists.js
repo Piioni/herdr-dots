@@ -57,7 +57,7 @@ export class Lists {
 
     // Spaces, each with its tabs and agents beneath in tab order, so rows don't move as
     // their state changes; next-agent keys follow that order.
-    const nested = { ...view, sort: { id: "grouped" }, byPriority: false, nested: true };
+    const nested = { ...view, sort: { id: "grouped" }, byPriority: false, nested: true, tail: (tab) => this.spaces.tabTail(tab, t) };
     const order = [];
     const all = agents();
     // Pinned agents go above every space, in the Agents tab's Pinned group.
@@ -66,25 +66,23 @@ export class Lists {
     order.push(...pins);
     this.spaces.above = () => (pinned ? this.agents.groupRows(pinned, 0, view, t) : []);
     const nest = (lines, row) => h_flex().children(lines.map((l) => Rail(l))).child(row.flex_1().min_w(0));
-    // A space's agents hang from its line; a main space's worktrees come after them,
-    // so its line carries on, and a worktree's own agents sit one step further in.
+    // A space's agents hang from its line.
     // Every tab shows: a tab with agents as its agents, any other as itself.
     const shownTab = focused()?.tab;
     const plain = (tab) => !all.some((a) => a.tab === tab.id);
-    this.spaces.under = ({ w, tree, kids }) => {
+    this.spaces.under = ({ w }) => {
       const items = w.tabs.flatMap((tab) =>
         plain(tab)
           ? tab.settled ? [] : [{ tab }]
           : all.filter((a) => a.tab === tab.id && !pins.includes(a.address)).map((a) => ({ a })),
       );
       order.push(...items.filter((x) => x.a).map((x) => x.a.address));
-      const before = tree ? [tree.startsWith("└") ? "" : "│"] : [];
       return items.flatMap((x, i) => {
-        const last = i === items.length - 1 && !kids;
+        const last = i === items.length - 1;
         const [row, ...subs] = x.a
           ? this.agents.agentWithSubs(x.a, i, nested, t)
-          : [this.agents.tabRow(w, x.tab, x.tab.id === shownTab, t)];
-        return [nest([...before, last ? "└" : "├"], row), ...subs.map((s) => nest([...before, last ? "" : "│"], s))];
+          : [this.agents.tabRow(w, x.tab, x.tab.id === shownTab, t, this.spaces.tabTail(x.tab.id, t))];
+        return [nest([last ? "└" : "├"], row), ...subs.map((s) => nest([last ? "" : "│"], s))];
       });
     };
     // One row lit: a space whose focused agent or tab shows beneath it leaves it to that row.

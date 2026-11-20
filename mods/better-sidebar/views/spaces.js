@@ -1,9 +1,11 @@
-// The spaces list: right-aligned branches, nested worktrees and a PR status line.
-// Repository facts follow each space's first terminal.
+// The spaces list. Branch and PR facts belong to each tab (its lead terminal's checkout),
+// drawn by the lists view on the tab and agent rows beneath a space.
 import { div } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import {
   spaces,
+  agents,
+  focused,
   machines,
   panes,
   run,
@@ -20,9 +22,7 @@ import { PRStatusObserver, prPlaceKey, prAppearance } from "../git/pr-status.js"
 import { spaceFolder, checkoutKey, readCheckout } from "../git/checkouts.js";
 import { loadSettings, duration } from "../settings.js";
 import { findNode } from "./find-node.js";
-import { TEXT, Icon, IconButton, Badge, Rail } from "./ui.js";
-
-const rowHeight = ({ tree }) => (tree ? 28 : 30);
+import { TEXT, Icon, IconButton, Badge } from "./ui.js";
 
 // Watches and terminal events handle most changes. Poll visible repositories
 // occasionally to catch edits and commits made outside Herdr.
@@ -69,10 +69,6 @@ export class Spaces {
     this.ready = {}; // machine -> its layout was readable at the last look
     this.at = {}; // Space ID -> checkout key at the previous refresh.
     this.watching = new Set(); // local repos' git folders
-    // Spaces made while this runs wait (at most a moment) for their git, so a
-    // worktree appears under its repo instead of jumping there.
-    this.shown = new Set(spaces().map((s) => s.id));
-    this.born = {};
     this.pressed = null;
     this.over = null;
     this.machines = [];
@@ -108,10 +104,9 @@ export class Spaces {
     const now = Date.now();
     const sp = spaces();
     this.updateColors(sp);
-    for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
     const ps = panes();
-    this.publishParents(sp, ps);
-    const places = sp.map((s) => {
+    const tabs = this.tabPlaces(sp);
+    const places = tabs.map((s) => {
       const tabs = new Set((s.tabs ?? []).map((tab) => tab.id));
       const folder = spaceFolder(s, ps);
       return {
@@ -123,9 +118,24 @@ export class Spaces {
       };
     });
     if (this.settings.pull_request_status) this.prObserver.refresh(places, cx);
-    const due = this.due(now, sp, ps);
+    const due = this.due(now, tabs, ps);
     if (due.size) this.refreshGit(due, cx);
-    if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
+  }
+
+  // Each tab as a one-tab place, so the per-space Git and PR plumbing reads per tab.
+  tabPlaces(sp) {
+    return sp.flatMap((s) => (s.tabs ?? []).map((tab) => ({ id: tab.id, machine: s.machine, folder: s.folder, tabs: [tab] })));
+  }
+
+  // At the right of a tab or agent row: the tab checkout's PR, ahead/behind on the shown tab, the branch on hover.
+  tabTail(tabID, t) {
+    const place = this.tabPlaces(spaces()).find((p) => p.id === tabID);
+    if (!place) return null;
+    const g = this.git[checkoutKey(place, panes())];
+    const branch = this.checkoutBranch(place);
+    return this.gitTail(g, tabID === focused()?.tab, t, place)
+      .id(`tab-git-${tabID}`)
+      .when(Boolean(branch), (el) => el.tooltip(branch));
   }
 
   // Places whose git could have changed: new ones (a new space, a cd), where a
@@ -284,26 +294,7 @@ export class Spaces {
     });
   }
 
-  // ── Space navigation and worktree/machine grouping ────────────────────────
-
-  // Tells the agents block, a separate copy, which main space each space belongs
-  // to: the repository's open main checkout, else the repository's folder name.
-  publishParents(sp, ps) {
-    const known = sp.map((w) => ({ w, g: this.git[checkoutKey(w, ps)] })).filter((r) => r.g);
-    const parents = {};
-    for (const { w, g } of known) {
-      const main = known.find((r) => r.g.repo === g.repo && !r.g.linked);
-      const folder = JSON.parse(g.repo)[1]
-        .replace(/\/\.git\/?$/, "")
-        .split("/")
-        .pop();
-      parents[w.id] = { key: g.repo, label: main?.w.name || folder };
-    }
-    const text = JSON.stringify(parents);
-    if (text === this.parentsText) return;
-    this.parentsText = text;
-    setShared("better-sidebar.space-parents", parents);
-  }
+  // ── Space navigation and machine grouping ─────────────────────────────────
 
   menu(w) {
     // A popup is as tall as its items; height is only the most.
@@ -318,17 +309,7 @@ export class Spaces {
 
   // Spaces in the order the person arranged them; worktrees are never nested.
   ordered() {
-    const sp = spaces();
-    const ps = panes();
-    const ready = (w) =>
-      this.shown.has(w.id) ||
-      checkoutKey(w, ps) in this.git ||
-      Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
-    for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
-    const list = sp
-      .map((w, i) => ({ w, i, g: this.git[checkoutKey(w, ps)] ?? null }))
-      .filter((r) => this.shown.has(r.w.id));
-    return list.map((r) => ({ ...r, tree: null, kids: 0 }));
+    return spaces().map((w, i) => ({ w, i }));
   }
 
   // The rows, under a header per machine once one isn't this computer.
@@ -338,7 +319,7 @@ export class Spaces {
     const out = [];
     const draw = (r, /** @type {number} */ index) => {
       if (r.w.active) { this.activeAt = out.length; this.activeSpace = r.w.id; }
-      out.push(...(collapsed ? [this.compact(r, t)] : [this.row(r, t).mt(index > 0 && !r.tree ? 8 : 0), ...(this.minimized.has(r.w.id) ? [] : (this.under?.(r) ?? []))]));
+      out.push(...(collapsed ? [this.compact(r, t)] : [this.row(r, t).mt(index > 0 ? 8 : 0), ...(this.minimized.has(r.w.id) ? [] : (this.under?.(r) ?? []))]));
     };
     this.activeAt = -1;
     const remote = [
@@ -366,8 +347,7 @@ export class Spaces {
     const layout = machines().find((k) => k.name === m)?.layout;
     return (
       layout === "loading" ||
-      (!layout && this.machines.some((k) => k.name === m && k.state === "connected")) ||
-      spaces().some((s) => (s.machine ?? null) === m && !this.shown.has(s.id))
+      (!layout && this.machines.some((k) => k.name === m && k.state === "connected"))
     );
   }
 
@@ -475,17 +455,20 @@ export class Spaces {
       .when(active && g?.behind > 0, (el) => el.child(Badge(`\u2193${g.behind}`)));
   }
 
-  // The branch and PR must describe the same checkout: the space's first
-  // terminal, matching Herdr's space naming and worktree grouping semantics.
-  checkoutStatus(w) {
+  // The branch and PR must describe the same checkout: the place's first terminal.
+  checkoutBranch(w) {
     const ps = panes();
     const folder = spaceFolder(w, ps);
     const tabs = new Set((w.tabs ?? []).map((tab) => tab.id));
-    const branch =
+    return (
       ps.find((pane) => tabs.has(pane.tab) && pane.cwd === folder)?.branch ??
-      this.git[prPlaceKey(w.machine, folder)]?.branch;
-    const status = this.prObserver.entries.get(prPlaceKey(w.machine, folder));
-    return status?.branch === branch ? status : null;
+      this.git[prPlaceKey(w.machine, folder)]?.branch
+    );
+  }
+
+  checkoutStatus(w) {
+    const status = this.prObserver.entries.get(prPlaceKey(w.machine, spaceFolder(w, panes())));
+    return status?.branch === this.checkoutBranch(w) ? status : null;
   }
 
   checkoutPRs(w) {
@@ -561,34 +544,16 @@ export class Spaces {
     return badge;
   }
 
-  // Under the row only when the PR lookup failed; the PR itself sits at the row's right.
-  prLine(w, t, tree) {
-    const status = this.checkoutStatus(w);
-    return h_flex()
-      .id(`space-pr-line-${w.id}`)
-      .h(20)
-      .pl(tree ? 44 : 27)
-      .items_center()
-      .tooltip(`PR refresh failed: ${status.error}`)
-      .child(
-        div()
-          .text_size(TEXT.caption)
-          .text_color(t.dim)
-          .child(status.prs.length ? "PR may be stale" : "PR unavailable"),
-      );
-  }
   // ── Expanded/compact rows and sidebar rendering ──────────────────────────
 
-  row({ w, i, g, tree }, t) {
-    const status = this.checkoutStatus(w);
-    const hasPRLine = Boolean(status?.error);
+  row({ w, i }, t) {
     // One row is lit: under the lists view, the focused agent beneath takes it.
     const lit = w.active && !this.quiet?.(w);
     const row = v_flex()
       .relative()
       .id(`space-${w.id}`)
       .px(8)
-      .h(rowHeight({ tree }) + (hasPRLine ? 22 : 0))
+      .h(30)
       .flex_none()
       .justify_center()
       .rounded(8)
@@ -601,14 +566,10 @@ export class Spaces {
         else if (this.hoveredSpace === w.id) this.hoveredSpace = null;
         cx.notify();
       })
-      .child(this.rowTitle(w, g, tree, t))
-      .when(hasPRLine, (el) => el.child(this.prLine(w, t, Boolean(tree))));
+      .child(this.rowTitle(w, t));
     if (this.pressed !== null && this.over === i && this.pressed !== i)
       row.child(this.dropLine(i, t));
-    const dragged = this.withDragging(row, w, i);
-    // Nested under the lists view, a worktree hangs from its main space's line.
-    if (!(tree && this.under)) return dragged;
-    return h_flex().child(Rail(tree.startsWith("└") ? "└" : "├", 14)).child(dragged.flex_1().min_w(0));
+    return this.withDragging(row, w, i);
   }
 
   // Where the dragged space would land.
@@ -650,20 +611,30 @@ export class Spaces {
       });
   }
 
-  rowTitle(w, g, tree, t) {
+  rowTitle(w, t) {
+    const min = this.minimized.has(w.id);
     return h_flex()
       .gap(9)
       .items_center()
-      .when(Boolean(tree), (el) => el.when(!this.under, (e) => e.pl(22)).child(Icon("branch", 13).text_color(t.dim)))
-      .when(!tree, (el) => el.child(this.avatar(w, t)))
+      .child(this.avatar(w, t))
       .child(
         div().min_w(0).max_w(150).truncate().tooltip(w.name).text_color(t.foreground).child(w.name),
       )
       .child(div().flex_1())
-      .child(this.gitTail(g, w.active, t, w))
+      .when(min, (el) => el.child(this.hiddenSummary(w, t)))
       .when(!w.machine && this.hoveredSpace === w.id, (el) => el.child(this.launchButton(w, t)))
       .when(Boolean(this.under) && (this.hoveredSpace === w.id || this.minimized.has(w.id)), (el) =>
         el.child(this.minimizeButton(w, t)));
+  }
+
+  // Minimized, a space still says how many agents it hides and the most urgent one's state.
+  hiddenSummary(w, t) {
+    const count = agents().filter((a) => a.space === w.id).length;
+    const loud = w.status && w.status !== "idle";
+    return h_flex().id(`space-hidden-${w.id}`).flex_none().gap(5).items_center().text_size(TEXT.caption).text_color(t.dim)
+      .tooltip(`${count} agent${count === 1 ? "" : "s"} hidden${loud ? ` · ${w.status}` : ""}`)
+      .when(loud, (el) => el.child(div().size(6).rounded(3).bg(tone(t, w.status))))
+      .when(count > 0, (el) => el.child(String(count)));
   }
 
   // Hides or shows the tabs and agents listed under a space (lists view only).

@@ -1,5 +1,4 @@
-// Adapted from Herdr's shipped agents mod, with grouping by main space and by
-// name prefix. Agents in grouped or priority views; parents take their most urgent sub-agent's place.
+// Adapted from Herdr's shipped agents mod, with grouping by name prefix. Agents in grouped or priority views; parents take their most urgent sub-agent's place.
 // A viewed done agent stays in Done until left.
 
 import { div, image, svg } from "gpui-kit";
@@ -70,7 +69,6 @@ const kidStatus = (k, listed) => {
 const SORTS = [
   { id: "priority", label: "Priority", icon: "clock" },
   { id: "grouped", label: "Grouped by space", icon: "layers" },
-  { id: "parent", label: "Grouped by main space", icon: "git-branch" },
   { id: "prefix", label: "Grouped by prefix", icon: "tag" },
 ];
 const sortOf = () => SORTS.find((s) => s.id === shared("agents.sort")) ?? SORTS[0];
@@ -91,15 +89,6 @@ export function namePrefix(...names) {
 // How `sort` gathers agents: a group's key and heading. Null keeps priority's sections.
 function grouping(sort, tabName) {
   if (sort === "grouped") return (a) => ({ id: `sp-${a.space}`, label: a.space_name || "" });
-  if (sort === "parent") {
-    const parents = shared("better-sidebar.space-parents") ?? {};
-    return (a) => {
-      const parent = parents[a.space];
-      return parent
-        ? { id: `repo-${parent.key}`, label: parent.label }
-        : { id: `sp-${a.space}`, label: a.space_name || "" };
-    };
-  }
   if (sort === "prefix")
     return (a) => {
       const prefix = namePrefix(a.space_name, tabName(a));
@@ -625,6 +614,7 @@ export class Agents {
           .tooltip(`${account.label} account · Continue with another account`)
           .on_click((_e, cx) => { cx.stop_propagation(); run(`relevo.handoff-agent-${a.address}`); }).child("Move")
         : div().id(`acct-${a.address}`).size(6).flex_none().rounded(3).bg(account.bg).tooltip(`${account.label} account`)))
+      .when(Boolean(view.tail), (el) => el.child(view.tail(a.tab)))
       .when(subs.length > 0, (el) => el.child(this.foldButton(a, subs, t)))
       .when(hovered, (el) => el.child(this.pinButton(a, t)))
       // How long it has been waiting: only when it waits on the person.
@@ -641,7 +631,7 @@ export class Agents {
   }
 
   // A tab with no agent, under its space in the lists view: its program and its name.
-  tabRow(w, tab, lit, t) {
+  tabRow(w, tab, lit, t, tail = null) {
     const l = lead(tab);
     // The tab's title, as Herdr's tab bar shows it.
     const name = tab.name;
@@ -674,7 +664,8 @@ export class Agents {
           .items_center()
           .child(div().min_w(0).truncate().tooltip([name, prog !== name && prog].filter(Boolean).join(" · ")).text_color(lit ? t.foreground : t.muted).child(name))
           .when(Boolean(prog) && prog !== name && !l?.program?.icon, (el) => el.child(this.programName(prog, t))),
-      );
+      )
+      .when(Boolean(tail), (el) => el.child(tail));
   }
 
   // The program, quietly after a row's name under its space.
