@@ -314,7 +314,7 @@ export class Spaces {
     });
   }
 
-  // Spaces in order, each worktree space moved under its main checkout's.
+  // Spaces in the order the person arranged them; worktrees are never nested.
   ordered() {
     const sp = spaces();
     const ps = panes();
@@ -326,20 +326,7 @@ export class Spaces {
     const list = sp
       .map((w, i) => ({ w, i, g: this.git[checkoutKey(w, ps)] ?? null }))
       .filter((r) => this.shown.has(r.w.id));
-    const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
-    const nested = (r) => r.g?.linked && mains.has(r.g.repo);
-    const out = [];
-    const placed = new Set(); // repos whose worktrees are listed (under the first of its spaces)
-    for (const r of list) {
-      if (nested(r)) continue;
-      const first = r.g && !r.g.linked && !placed.has(r.g.repo);
-      const kids = first ? list.filter((k) => nested(k) && k.g.repo === r.g.repo) : [];
-      out.push({ ...r, tree: null, kids: kids.length });
-      if (!first) continue;
-      placed.add(r.g.repo);
-      kids.forEach((k, n) => out.push({ ...k, tree: n === kids.length - 1 ? "└─" : "├─" }));
-    }
-    return out;
+    return list.map((r) => ({ ...r, tree: null, kids: 0 }));
   }
 
   // The rows, under a header per machine once one isn't this computer.
