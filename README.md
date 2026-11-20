@@ -1,78 +1,55 @@
 # herdr-dots
 
-My configuration of the [Herdr](https://herdr.dev) desktop app: a layout and the mods behind it. Herdr's interface is
-files (layouts, mods, keys, settings), so this folder *is* the app's look and behavior.
+My [Herdr](https://herdr.dev) desktop app setup: the `piioni` layout and the mods behind it. Herdr's interface is
+files, so this folder *is* the app.
 
 ![The piioni layout](hero.png)
 
 ## Mods
 
-| Mod | What it is | |
+| Mod | What it is | Origin |
 |---|---|---|
-| [`relevo`](mods/relevo) | Accounts and their usage, launchers, handoff between accounts, the panel bar and Settings | ![](mods/relevo/accounts.png) |
-| [`better-sidebar`](mods/better-sidebar) | Spaces and agents in one block: grouping, pins, account dots, background work and a launcher per space | ![](mods/better-sidebar/screenshot.png) |
-| [`prs`](mods/prs) | GitHub pull requests: a panel and a full PR dialog | ![](mods/prs/screenshot.png) |
-| [`linear`](mods/linear) | Your Linear tickets as a panel | ![](mods/linear/screenshot.png) |
-| [`tasks`](mods/tasks) | The scripts in a repo's `.tasks/` as background tasks: groups, hot reload, results and a worktree selector | ![](mods/tasks/screenshot.png) |
-| [`ion-files`](mods/ion-files) | File tree with file operations and Neovim | ![](mods/ion-files/screenshot.png) |
-| [`ion-changes`](mods/ion-changes) | Uncommitted changes, scopes (branch, commit) and a commit box | ![](mods/ion-changes/screenshot.png) |
-| [`ion-diff`](mods/ion-diff) | A file's diff in a tab or popup: line numbers, syntax colors, folded context, ask an agent | |
-| [`ion-tabs`](mods/ion-tabs) | The tab bar and the panel buttons | ![](mods/ion-tabs/screenshot.png) |
+| [`relevo`](mods/relevo) | Accounts and their usage, launchers, handoff between accounts, the panel bar and Settings | [herdr-relevo](https://github.com/johnny4young/herdr-relevo) |
+| [`better-sidebar`](mods/better-sidebar) | Spaces and agents in one block: pins, branch and PR per tab, minimizable spaces, account dots | [munza/herdr-mods](https://github.com/munza/herdr-mods/tree/main/better-sidebar) |
+| [`prs`](mods/prs) | GitHub pull requests: a panel and a full PR dialog | mine |
+| [`linear`](mods/linear) | Your Linear tickets as a panel | mine |
+| [`tasks`](mods/tasks) | The scripts in a repo's `.tasks/` as background tasks | mine |
+| [`shortcuts`](mods/shortcuts) | Every key binding in one searchable sheet | [tahadx/herdr-setup](https://github.com/tahadx/herdr-setup) |
+| [`ion-files`](mods/ion-files) | File tree with file operations and Neovim | Herdr's `files` |
+| [`ion-changes`](mods/ion-changes) | Uncommitted changes, scopes and a commit box | Herdr's `changes` |
+| [`ion-diff`](mods/ion-diff) | A file's diff in a tab or popup | Herdr's `changes` |
+| [`ion-tabs`](mods/ion-tabs) | The tab bar and the panel buttons | Herdr's `tabs` |
 
-Each mod has its own README with what it does, why it exists, what it needs and how to test it.
+`ion-*` are clones: Herdr rewrites its shipped mods on every start, so changes have to live under another name.
+Most mods have a README with screenshots, what they need and how to test them.
 
-### Naming
-
-- `ion-*`: clones of Herdr's own mods (`files`, `changes`, `tabs`), improved. Herdr rewrites its shipped mods on every
-  start, so changes to them have to live in a clone with another name.
-- `relevo`: depends on the Relevo setup (accounts and launchers), and derives from
-  [herdr-relevo](https://github.com/johnny4young/herdr-relevo).
-- `better-sidebar`: [munza's Better Sidebar](https://github.com/munza/herdr-mods/tree/main/better-sidebar) with the
-  Relevo pieces brought in. It replaces the old `relevo-agents`.
-- `prs`, `linear`, `tasks`: my own.
-
-## Get it yourself
-
-The easiest way is to let your agent do it, picking only what you want. Tell your agent to:
-
-```text
-Read ~/.config/herdr-app/AGENTS.md, then add the mods from https://github.com/Piioni/herdr-dots to my
-Herdr app, asking me what I want. Go mod by mod: read its README, tell me what it is and how it works,
-and ask whether I want it. Only add the ones I say yes to, and never replace my keys.json, settings.json
-or layouts without asking.
-
-Be careful with relevo and better-sidebar: they are built around one person's workflow (provider accounts,
-launchers, and Claude/Pi/Codex profiles), so do not copy mods/relevo/config.js as it is. If I want them,
-explain what accounts, launchers and profiles are, ask me which ones I have, and write a config for me.
-better-sidebar's account dots and background-work capsule need the Claude Code hook in mods/relevo/hooks: explain
-what it does and ask before installing it.
-
-prs needs the GitHub CLI (gh) logged in. linear needs a Linear API key in ~/.config/linear/token: ask me
-to put it there myself, and never ask me to paste it in a command line. tasks runs the scripts in each repo's
-.tasks/ folder: ask me which commands I want as tasks and write the scripts with me, using the optional header
-lines from its README. Its Tasks button is a block in the piioni layout; without that layout it opens with
-`herdr-app do mod.open --name tasks`. The ion-* mods are clones of Herdr's
-own files, changes and tabs: tell me what each one changes before adding it. The piioni layout is
-optional: ask me if I want to use it or only some of its pieces.
-```
-
-### What the mods need
+## Requirements
 
 | Need | For |
 |---|---|
-| `gh` ([GitHub CLI](https://cli.github.com/)), logged in | `prs` |
+| [`gh`](https://cli.github.com/), logged in | `prs`, PR status in `better-sidebar` |
 | Linear API key in `~/.config/linear/token` | `linear`, the Linear chip in `prs` |
-| `hc` ([herdr-core](https://herdr.dev)), `git`, and scripts in each repo's `.tasks/` | `tasks` |
-| `nvim` (Neovim) | `ion-files` |
-| `git` (and `nvim` for the Neovim actions) | `ion-changes`, `ion-diff` |
-| Claude Code, and optionally its hook (`mods/relevo/hooks`) | account usage, the account dots, background work |
-| Edit `mods/relevo/config.js` (or use Settings) | your accounts and launchers: the checked-in one is mine |
+| `git`, `nvim` | `ion-*`, `tasks` |
+| Claude Code and its hook in `mods/relevo/hooks` | account usage, account dots, background work |
+
+`mods/relevo/config.js` holds my accounts and launchers: write your own, don't copy it.
+
+## Install
+
+Pick what you want and let your agent add it:
+
+```text
+Read ~/.config/herdr-app/AGENTS.md, then add mods from https://github.com/Piioni/herdr-dots to my Herdr
+app. Go mod by mod: read its README, tell me what it does and ask before adding it. Never replace my
+keys.json, settings.json or layouts without asking. For relevo, don't copy config.js: ask me which
+accounts and launchers I have and write it with me. Ask before installing the Claude Code hook.
+Never ask me to paste API keys in a command line.
+```
 
 ## What is versioned
 
-Only what is mine; the `.gitignore` is an allow-list. Herdr's own files (shipped mods and layouts, icons, type
-definitions, `AGENTS.md`), per-mod data and caches (`data/`), and window and shared state are ignored.
+Only my own files: `.gitignore` is an allow-list. Herdr's shipped files, mod data and window state stay out.
 
 ## License
 
-Apache License 2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). Parts derive from herdr-relevo and from Herdr's own mods.
+Apache 2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). `shortcuts` is MIT (see its LICENSE).

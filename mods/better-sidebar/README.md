@@ -9,8 +9,10 @@ Spaces and agents in one sidebar block, with the Relevo account indicators, back
 One mod, several parts; `view` in the block's props picks one (`lists`, `agents`, `footer`, `panel-toggle`, or spaces
 by default). The piioni layout uses `lists`: **Spaces** and **Agents** as two tabs with a quiet count.
 
-- **Spaces**: grouped by machine, in the order you arrange them (worktrees are never nested), each tab as a row with its program icon and agent
-  status. Hovering a space shows a `+` that opens the Relevo launcher for that space.
+- **Spaces**: grouped by machine, in the order you arrange them (worktrees are never nested), each tab as a row with its
+  program icon, agent status, and its own checkout's PR (ahead/behind on the shown tab, branch on hover). Hovering a
+  space shows a `+` that opens the Relevo launcher and a chevron that minimizes it; a minimized space shows how many
+  agents it hides and the most urgent one's status.
 - **Agents**: grouped, sorted and pinnable (pins are Herdr's `terminal.pin`, so every client sees them). Each agent row
   shows:
   - a small dot in its **account** color (from the `agent.account` label); on hover it turns into **Move**, which hands
