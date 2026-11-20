@@ -80,8 +80,10 @@ export class Spaces {
     // The active space's place among the list's direct children, so the list can scroll it into view.
     this.scroll = ScrollHandle.new();
     this.activeAt = -1;
+    this.minimized = new Set();
     try {
       this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
+      this.minimized = new Set(JSON.parse(localStorage.getItem("spaces.minimized") ?? "[]"));
     } catch {
       /* Ignore invalid saved UI state. */
     }
@@ -336,7 +338,7 @@ export class Spaces {
     const out = [];
     const draw = (r, /** @type {number} */ index) => {
       if (r.w.active) { this.activeAt = out.length; this.activeSpace = r.w.id; }
-      out.push(...(collapsed ? [this.compact(r, t)] : [this.row(r, t).mt(index > 0 && !r.tree ? 8 : 0), ...(this.under?.(r) ?? [])]));
+      out.push(...(collapsed ? [this.compact(r, t)] : [this.row(r, t).mt(index > 0 && !r.tree ? 8 : 0), ...(this.minimized.has(r.w.id) ? [] : (this.under?.(r) ?? []))]));
     };
     this.activeAt = -1;
     const remote = [
@@ -659,7 +661,25 @@ export class Spaces {
       )
       .child(div().flex_1())
       .child(this.gitTail(g, w.active, t, w))
-      .when(!w.machine && this.hoveredSpace === w.id, (el) => el.child(this.launchButton(w, t)));
+      .when(!w.machine && this.hoveredSpace === w.id, (el) => el.child(this.launchButton(w, t)))
+      .when(Boolean(this.under) && (this.hoveredSpace === w.id || this.minimized.has(w.id)), (el) =>
+        el.child(this.minimizeButton(w, t)));
+  }
+
+  // Hides or shows the tabs and agents listed under a space (lists view only).
+  minimizeButton(w, t) {
+    const min = this.minimized.has(w.id);
+    return div().id(`space-minimize-${w.id}`).size(18).flex_none().rounded(4).flex().items_center().justify_center()
+      .cursor_pointer().text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))
+      .tooltip(min ? "Show this space's tabs" : "Minimize this space")
+      .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.pressed = null; this.over = null; })
+      .on_mouse_up("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        if (!this.minimized.delete(w.id)) this.minimized.add(w.id);
+        localStorage.setItem("spaces.minimized", JSON.stringify([...this.minimized]));
+        cx.notify();
+      }).child(Icon(`chevron-${min ? "right" : "down"}`, 11));
   }
 
   /** @param {{id:string}} w @param {Record<string, `#${string}`>} t */
