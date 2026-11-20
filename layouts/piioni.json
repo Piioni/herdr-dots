@@ -121,6 +121,20 @@
               "window_drag": true
             },
             {
+              "id": "insights-button",
+              "type": "block",
+              "content": {
+                "mod": "insights",
+                "props": {
+                  "mode": "toolbar"
+                }
+              },
+              "size": {
+                "px": 96
+              },
+              "window_drag": true
+            },
+            {
               "id": "panel-buttons",
               "type": "block",
               "content": {
