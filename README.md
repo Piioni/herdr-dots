@@ -20,6 +20,8 @@ files, so this folder *is* the app.
 | [`ion-diff`](mods/ion-diff) | A file's diff in a tab or popup | Herdr's `changes` |
 | [`ion-tabs`](mods/ion-tabs) | The tab bar and the panel buttons | Herdr's `tabs` |
 
+![The PRs panel](mods/prs/screenshot.png)
+
 `ion-*` are clones: Herdr rewrites its shipped mods on every start, so changes have to live under another name.
 Most mods have a README with screenshots, what they need and how to test them.
 
