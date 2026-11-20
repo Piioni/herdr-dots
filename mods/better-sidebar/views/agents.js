@@ -614,7 +614,10 @@ export class Agents {
           .tooltip(`${account.label} account · Continue with another account`)
           .on_click((_e, cx) => { cx.stop_propagation(); run(`relevo.handoff-agent-${a.address}`); }).child("Move")
         : div().id(`acct-${a.address}`).size(6).flex_none().rounded(3).bg(account.bg).tooltip(`${account.label} account`)))
-      .when(Boolean(view.tail), (el) => el.child(view.tail(a.tab)))
+      .when(Boolean(view.tail), (el) => {
+        const tail = view.tail(a.tab, a.address);
+        return tail ? el.child(tail) : el;
+      })
       .when(subs.length > 0, (el) => el.child(this.foldButton(a, subs, t)))
       .when(hovered, (el) => el.child(this.pinButton(a, t)))
       // How long it has been waiting: only when it waits on the person.

@@ -128,14 +128,22 @@ export class Spaces {
   }
 
   // At the right of a tab or agent row: the tab checkout's PR, ahead/behind on the shown tab, the branch on hover.
-  tabTail(tabID, t) {
-    const place = this.tabPlaces(spaces()).find((p) => p.id === tabID);
-    if (!place) return null;
-    const g = this.git[checkoutKey(place, panes())];
-    const branch = this.checkoutBranch(place);
-    return this.gitTail(g, tabID === focused()?.tab, t, place)
-      .id(`tab-git-${tabID}`)
-      .when(Boolean(branch), (el) => el.tooltip(branch));
+  // Reads Herdr's data once per render: rows call the returned function, and every
+  // spaces()/panes() call copies the whole world, so per-row reads time the render out.
+  // `row` keeps element ids unique when a tab has several agent rows.
+  tabTails(t) {
+    const ps = panes();
+    const places = new Map(this.tabPlaces(spaces()).map((p) => [p.id, p]));
+    const shown = focused()?.tab;
+    return (tabID, row = tabID) => {
+      const found = places.get(tabID);
+      if (!found) return null;
+      const place = { ...found, id: row };
+      const branch = this.checkoutBranch(place, ps);
+      return this.gitTail(this.git[checkoutKey(place, ps)], tabID === shown, t, place, ps)
+        .id(`tab-git-${row}`)
+        .when(Boolean(branch), (el) => el.tooltip(branch));
+    };
   }
 
   // Places whose git could have changed: new ones (a new space, a cd), where a
@@ -442,8 +450,8 @@ export class Spaces {
   // ── Branch and PR descriptions ───────────────────────────────────────────
 
   // At the right: the checkout's pull request, and ahead/behind on the selected space.
-  gitTail(g, active, t, w) {
-    const pr = w ? this.prBadge(w, t) : null;
+  gitTail(g, active, t, w, ps = panes()) {
+    const pr = w ? this.prBadge(w, t, false, ps) : null;
     return h_flex()
       .flex_none()
       .gap(5)
@@ -456,8 +464,7 @@ export class Spaces {
   }
 
   // The branch and PR must describe the same checkout: the place's first terminal.
-  checkoutBranch(w) {
-    const ps = panes();
+  checkoutBranch(w, ps = panes()) {
     const folder = spaceFolder(w, ps);
     const tabs = new Set((w.tabs ?? []).map((tab) => tab.id));
     return (
@@ -466,13 +473,13 @@ export class Spaces {
     );
   }
 
-  checkoutStatus(w) {
-    const status = this.prObserver.entries.get(prPlaceKey(w.machine, spaceFolder(w, panes())));
-    return status?.branch === this.checkoutBranch(w) ? status : null;
+  checkoutStatus(w, ps = panes()) {
+    const status = this.prObserver.entries.get(prPlaceKey(w.machine, spaceFolder(w, ps)));
+    return status?.branch === this.checkoutBranch(w, ps) ? status : null;
   }
 
-  checkoutPRs(w) {
-    return this.checkoutStatus(w)?.prs ?? [];
+  checkoutPRs(w, ps) {
+    return this.checkoutStatus(w, ps)?.prs ?? [];
   }
 
   // Keep ordinary clicks available to the enclosing space row. Modified link
@@ -510,8 +517,8 @@ export class Spaces {
       .child(`#${pr.number}`);
   }
 
-  prBadge(w, t, compact = false) {
-    const prs = this.checkoutPRs(w);
+  prBadge(w, t, compact = false, ps = panes()) {
+    const prs = this.checkoutPRs(w, ps);
     if (!prs.length) return null;
     const badge = h_flex().gap(5).flex_none().items_center();
     // Keep the sidebar width bounded when a branch targets several base repos.

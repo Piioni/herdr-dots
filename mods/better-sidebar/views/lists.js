@@ -57,7 +57,7 @@ export class Lists {
 
     // Spaces, each with its tabs and agents beneath in tab order, so rows don't move as
     // their state changes; next-agent keys follow that order.
-    const nested = { ...view, sort: { id: "grouped" }, byPriority: false, nested: true, tail: (tab) => this.spaces.tabTail(tab, t) };
+    const nested = { ...view, sort: { id: "grouped" }, byPriority: false, nested: true, tail: this.spaces.tabTails(t) };
     const order = [];
     const all = agents();
     // Pinned agents go above every space, in the Agents tab's Pinned group.
@@ -81,7 +81,7 @@ export class Lists {
         const last = i === items.length - 1;
         const [row, ...subs] = x.a
           ? this.agents.agentWithSubs(x.a, i, nested, t)
-          : [this.agents.tabRow(w, x.tab, x.tab.id === shownTab, t, this.spaces.tabTail(x.tab.id, t))];
+          : [this.agents.tabRow(w, x.tab, x.tab.id === shownTab, t, nested.tail(x.tab.id))];
         return [nest([last ? "└" : "├"], row), ...subs.map((s) => nest([last ? "" : "│"], s))];
       });
     };
